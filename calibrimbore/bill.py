@@ -35,11 +35,11 @@ fig_width = fig_width_pt*inches_per_pt  # width in inches
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
-g = np.loadtxt(package_directory+ '../data/ps1_bands/ps1_g.dat')
-r = np.loadtxt(package_directory+ '../data/ps1_bands/ps1_r.dat')
-i = np.loadtxt(package_directory+ '../data/ps1_bands/ps1_i.dat')
-z = np.loadtxt(package_directory+ '../data/ps1_bands/ps1_z.dat')
-y = np.loadtxt(package_directory+ '../data/ps1_bands/ps1_y.dat')
+g = np.loadtxt(package_directory + 'data/ps1_bands/ps1_g.dat')
+r = np.loadtxt(package_directory + 'data/ps1_bands/ps1_r.dat')
+i = np.loadtxt(package_directory + 'data/ps1_bands/ps1_i.dat')
+z = np.loadtxt(package_directory + 'data/ps1_bands/ps1_z.dat')
+y = np.loadtxt(package_directory + 'data/ps1_bands/ps1_y.dat')
 
 ps1_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'r': S.ArrayBandpass(r[:,0],r[:,1]),
@@ -268,7 +268,7 @@ def Tonry_residual(Colours):
     """
     Calculate the residuals of the observed data from the Tonry et al 2012 PS1 splines.
     """
-    tonry = np.loadtxt(package_directory+'../data/Tonry_splines.txt')
+    tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
     X = 'r-i'
     Y = 'g-r'
     x = Colours['obs ' + X][0,:]
@@ -297,7 +297,7 @@ def Tonry_reduce(Data,plot=False,savename=None):
     Uses the Tonry et al. 2012 PS1 splines to fit dust and find all outliers.
     '''
     data = deepcopy(Data)
-    tonry = np.loadtxt(package_directory+'../data/Tonry_splines.txt')
+    tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
     compare = np.array([['r-i','g-r']])   
     #cind =  ((data['campaign'].values == Camp))
     dat = data#.iloc[cind]

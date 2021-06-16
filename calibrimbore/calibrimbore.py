@@ -15,7 +15,10 @@ from scipy.interpolate import UnivariateSpline
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
-import bill as utils
+from .bill import * 
+
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning) 
 
 fig_width_pt = 240.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27			   # Convert pt to inches
@@ -96,7 +99,7 @@ class sauron():
 
 		# Defined:
 		if self.system == 'ab':
-			self.ps1_mags = np.load(package_directory+'../data/calspec_mags_ps1.npy',
+			self.ps1_mags = np.load(package_directory+'data/calspec_mags_ps1.npy',
 									allow_pickle=True).item()		
 		elif self.system == 'vega':
 			raise ValueError('need to make vega mags')
@@ -143,7 +146,7 @@ class sauron():
 		b = S.ArrayBandpass(band[:,0], band[:,1], waveunits='Angstrom',name=self.name)
 		self.band = b
 		# get the theoretical zeropoint for the loaded bandpass
-		self.zp = utils.get_pb_zpt(self.band, reference=self.system, model_mag=0)
+		self.zp = get_pb_zpt(self.band, reference=self.system, model_mag=0)
 
 
 
@@ -167,10 +170,10 @@ class sauron():
 		"""
 		bands = ''
 		percentage = []
-		pbs = list(utils.ps1_bands.keys()) 
+		pbs = list(ps1_bands.keys()) 
 
 		for pb in pbs:
-			ps1 = utils.ps1_bands[pb]
+			ps1 = ps1_bands[pb]
 			func = interp1d(ps1.wave,ps1.throughput,bounds_error=False,fill_value=0)
 			overlap = (np.trapz(func(self.band.wave) * self.band.throughput, x = self.band.wave) / 
 					   np.trapz(self.band.throughput, x = self.band.wave))
@@ -206,7 +209,7 @@ class sauron():
 		mags : array 
 			Magnitudes for the input bandpass
 		"""
-		files = glob(package_directory+'../data/calspec/*.dat')
+		files = glob(package_directory+'data/calspec/*.dat')
 		files = np.array(files)
 		# make sure the mags are in the same order
 		files.sort()
@@ -218,7 +221,7 @@ class sauron():
 			if ebv > 0:
 				spec = S.ArraySpectrum(spec.wave, 
 								apply(fitzpatrick99(spec.wave.astype('double'),ebv*Rv,Rv),spec.flux))
-			mags += [utils.synmag(spec,self.band,self.zp)]
+			mags += [synmag(spec,self.band,self.zp)]
 		mags = np.array(mags)
 		if ebv == 0:
 			self.mags = mags
@@ -421,12 +424,12 @@ class sauron():
 		k = 0
 		for f in filts:
 			if f in self.ps1_filters:
-				plt.plot(utils.ps1_bands[f].wave,
-						 utils.ps1_bands[f].throughput/np.nanmax(utils.ps1_bands[f].throughput),
+				plt.plot(ps1_bands[f].wave,
+						 ps1_bands[f].throughput/np.nanmax(ps1_bands[f].throughput),
 						 '-',color=colors[k],label='PS1 '+f)
 			else:
-				plt.plot(utils.ps1_bands[f].wave,
-						 utils.ps1_bands[f].throughput/np.nanmax(utils.ps1_bands[f].throughput),
+				plt.plot(ps1_bands[f].wave,
+						 ps1_bands[f].throughput/np.nanmax(ps1_bands[f].throughput),
 					 ':',color=colors[k],label='PS1 '+f)
 			k += 1
 		
@@ -584,7 +587,7 @@ class sauron():
 
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
-			cal_stars = utils.get_ps1(mags.ra[i], mags.dec[i],size=.2*60**2)
+			cal_stars = get_ps1(mags.ra[i], mags.dec[i],size=.2*60**2)
 
 			e, dat = Tonry_reduce(cal_stars)
 
@@ -619,7 +622,7 @@ class sauron():
 			Composite magnitudes created for the targets of interest.
 		"""
 		if (ra is not None) & (dec is not None):
-			mags = utils.get_ps1(ra, dec)
+			mags = get_ps1(ra, dec)
 
 		# stellar locus regression goes here
 		
