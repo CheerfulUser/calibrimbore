@@ -72,8 +72,6 @@ class sauron():
 	
 	make_comp : `bool`
 		If `True` the compsite band functions will run.
-	
-		
 	"""
 	def __init__(self,band=None,name=None,ps1_filters='auto',
 				 gr_lims=None,gi_lims=None,system='AB',
@@ -99,10 +97,11 @@ class sauron():
 
 		# Defined:
 		if self.system == 'ab':
-			self.ps1_mags = np.load(package_directory+'data/calspec_mags_ps1.npy',
+			self.ps1_mags = np.load(package_directory+'data/calspec_ab_mags_ps1.npy',
 									allow_pickle=True).item()		
 		elif self.system == 'vega':
-			raise ValueError('need to make vega mags')
+			self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
+									allow_pickle=True).item()		
 
 		# Calculated
 		self.mags = None
