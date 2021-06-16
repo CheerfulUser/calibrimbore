@@ -96,7 +96,7 @@ class sauron():
 
 		# Defined:
 		if self.system == 'ab':
-			self.ps1_mags = np.load(package_directory+'calspec_mags_ps1.npy',
+			self.ps1_mags = np.load(package_directory+'../data/calspec_mags_ps1.npy',
 									allow_pickle=True).item()		
 		elif self.system == 'vega':
 			raise ValueError('need to make vega mags')

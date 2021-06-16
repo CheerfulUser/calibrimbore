@@ -1,0 +1,5 @@
+include README.md LICENSE
+recursive-include data/calspec/
+recursive-include data/ps1_bands/
+include data/Tonry_splines.txt
+include data/calspec_mags_ps1.npy
