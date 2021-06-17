@@ -72,10 +72,14 @@ class sauron():
 	
 	make_comp : `bool`
 		If `True` the compsite band functions will run.
+
+	cubic_corr : `bool`
+		If `True` the a color dependent magnitude cubic polynomial
+		correction will be calculated for the composite magnitude.
 	"""
 	def __init__(self,band=None,name=None,ps1_filters='auto',
 				 gr_lims=None,gi_lims=None,system='AB',
-				 plot=False,make_comp=True):
+				 plot=False,make_comp=True, cubic_corr=True):
 		"""
 		Setup the class.
 		"""
@@ -93,15 +97,17 @@ class sauron():
 		
 		self.gr_lims = gr_lims
 		self.gi_lims = gi_lims
+		self.cubic_corr = cubic_corr
 
 
 		# Defined:
 		if self.system == 'ab':
 			self.ps1_mags = np.load(package_directory+'data/calspec_ab_mags_ps1.npy',
 									allow_pickle=True).item()		
-		elif self.system == 'vega':
-			self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
-									allow_pickle=True).item()		
+		# actually makes no sense to do this here since all PS1 is in AB
+		#elif self.system == 'vega':
+		#	self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
+		#							allow_pickle=True).item()		
 
 		# Calculated
 		self.mags = None
@@ -110,6 +116,11 @@ class sauron():
 		self.mask = None
 		self.R = None
 		self.spline = None
+		self.cubic_coeff = None
+		self.gr = self.ps1_mags['g'] - self.ps1_mags['r']
+		if self.gr_lims is not None:
+			ind = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
+			self.gr = self.gr[ind]
 
 
 		# Identify relevant PS1 filters to use 
@@ -123,11 +134,14 @@ class sauron():
 				self.coverage_plot()
 			self.syn_calspec_mags()
 			self.fit_comp()
-
+			self.print_func()
+			if cubic_corr:
+				self.fit_cubic_correction()
+				self.print_cubic_correction()
 			if plot:
 				self.diagnostic_plots()
 
-			self.print_func()
+			
 
 
 	def load_band(self):
@@ -378,34 +392,45 @@ class sauron():
 		self.fit_res = res
 
 
-	def make_spline(self):
-		"""
-		Make a secondary correction spline. This doesn't work well yet...
-		"""
-		gi = False
-		# apply colour limits
-		if self.gr_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['r']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['r']) < self.gr_lims[1]))
-			x = (self.ps1_mags['g'] - self.ps1_mags['r'])[ind]
-			gi = False
-		elif self.gi_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['i']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['i']) < self.gr_lims[1]))
-			x = (self.ps1_mags['g'] - self.ps1_mags['i'])[ind]
-		else:
-			x = (self.ps1_mags['g'] - self.ps1_mags['r'])
-			ind = np.isfinite(x)
+	def cubic_correction(self,x=None):
+		if x is None:
+			x = self.gr
+		coeff = self.cubic_coeff
+		fit = coeff[0] + coeff[1] * x + coeff[2] * x**2 + coeff[3] * x**3
+		return fit
 
-		self.make_composite()
-		self.diff = (self.mags - self.comp)[ind]
-		self.mask = ~sigma_clip(self.diff,sigma=3).mask
-		diff = self.diff[self.mask]
+	def cube_min_func(self,coeff):
+		self.cubic_coeff = coeff
+		y = self.diff[self.mask]
 
-		ind = np.argsort(x[self.mask])
-		spl = UnivariateSpline(x[self.mask][ind], diff[ind])
-		spl.set_smoothing_factor(1e5)
-		self.spline = spl
+		fit = self.cubic_correction()
+		diff = np.nansum((fit[self.mask]-y)**2)
+		return abs(diff)
+
+	def fit_cubic_correction(self):
+		c0 = [0,0,0,0]
+		res = minimize(self.cube_min_func,c0)
+		self.cubic_coeff = res.x
+		mask = sigma_clip(self.diff-self.cubic_correction(),sigma=3).mask
+		self.mask[mask] = False
+		res = minimize(self.cube_min_func,c0)
+		self.cubic_coeff = res.x
+
+	def print_cubic_correction(self):
+		from IPython.display import display, Math
+		coeff = self.cubic_coeff
+		eqn = r'$m_c=' + str(np.round(coeff[0],3)) 
+		if coeff[1] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[1],4)) + '(g-r)' 
+		if coeff[2] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[2],4)) + '(g-r)^2' 
+		if coeff[3] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[3],4)) + '(g-r)^3'
+		display(Math(eqn))
+
 
 	def coverage_plot(self):
 		"""
@@ -444,7 +469,7 @@ class sauron():
 		plt.xlabel(r'Wavelength $\left(\rm \AA \right)$',fontsize=15)
 		plt.tight_layout()
 
-	def diagnostic_plots(self):
+	def diagnostic_plots(self,spline=True):
 		"""
 		Plots to show how good the fit is.
 		"""
@@ -467,16 +492,23 @@ class sauron():
 
 		self.make_composite()
 		self.diff = (self.mags - self.comp)[ind]
+		#if spline:
+
 		self.mask = ~sigma_clip(self.diff,sigma=3).mask
-		self.make_spline()
+		#self.make_spline()
+		 
 		diff = (self.diff[self.mask])*1e3# - self.spline(x[self.mask])) * 1e3
 
 		med = np.percentile(diff,50)
 		low = np.percentile(diff,16)
 		high = np.percentile(diff,80)
 
-		plt.figure(figsize=(3*fig_width,1*fig_width))
-		plt.subplot(121)
+		if self.cubic_corr:
+			plt.figure(figsize=(3*fig_width,2*fig_width))
+			plt.subplot(221)
+		else:
+			plt.figure(figsize=(3*fig_width,1*fig_width))
+			plt.subplot(121)
 		b = int(np.nanmax(diff) - np.nanmin(diff) /(2*iqr(diff)*len(diff)**(-1/3)))
 		if b > 10:
 			b = 10
@@ -493,23 +525,61 @@ class sauron():
 		plt.xlabel(r'Cal$-$Comp (mmag)',fontsize=15)
 		plt.ylabel('Occurrence',fontsize=15)
 
-		plt.subplot(122)
+		if self.cubic_corr:
+			plt.subplot(222)
+		else:
+			plt.subplot(122)
 		plt.plot(x[self.mask],diff,'.')
-		ind = np.argsort(x[self.mask])
-		spl = UnivariateSpline(x[self.mask][ind], diff[ind])
-		spl.set_smoothing_factor(1e5)
-		xx = np.arange(min(x),max(x),0.01)
-
-		#plt.plot(xx,spl(xx))
+		
+		if self.cubic_corr:
+			xx = np.arange(min(x[self.mask]),max(x[self.mask]),0.01)
+			plt.plot(xx,self.cubic_correction(x=xx)*1e3,label='Cubic correction')
 		plt.axhline(med,ls='--',color='k')
 		plt.axhline(low,ls=':',color='k')
 		plt.axhline(high,ls=':',color='k')
-
+		if self.cubic_corr:
+			plt.legend(loc=1)
 		if gi:
 			plt.xlabel(r'$g-i$ (mag)',fontsize=15)
 		else:
 			plt.xlabel(r'$g-r$ (mag)',fontsize=15)
 		plt.ylabel(r'Cal$-$Comp (mmag)',fontsize=15)
+
+
+		if self.cubic_corr:
+			diff = diff - self.cubic_correction(x=x)[self.mask] * 1e3
+			med = np.percentile(diff,50)
+			low = np.percentile(diff,16)
+			high = np.percentile(diff,80)
+			plt.subplot(223)
+			b = int(np.nanmax(diff) - np.nanmin(diff) /(2*iqr(diff)*len(diff)**(-1/3)))
+			if b > 10:
+				b = 10
+			plt.hist(diff,alpha=0.5,bins=b);
+
+			plt.axvline(med,ls='--',color='k')
+			plt.axvline(low,ls=':',color='k')
+			plt.axvline(high,ls=':',color='k')
+
+			s = ('$'+str((np.round(med,0)))+'^{+' + 
+				str(int(np.round(high-med,0)))+'}_{'+
+				str(int(np.round(low-med,0)))+'}$')
+			plt.annotate(s,(.75,.8),fontsize=10,xycoords='axes fraction')
+			plt.xlabel(r'Cal$-$Comp (mmag)',fontsize=15)
+			plt.ylabel('Occurrence',fontsize=15)
+
+			plt.subplot(224)
+			plt.plot(x[self.mask],diff,'.')
+			
+			plt.axhline(med,ls='--',color='k')
+			plt.axhline(low,ls=':',color='k')
+			plt.axhline(high,ls=':',color='k')
+			if gi:
+				plt.xlabel(r'$g-i$ (mag)',fontsize=15)
+			else:
+				plt.xlabel(r'$g-r$ (mag)',fontsize=15)
+			plt.ylabel(r'Cal$-$Comp (mmag)',fontsize=15)
+
 		plt.tight_layout()
 
 
@@ -660,3 +730,5 @@ class sauron():
 
 		display(Math(eqn))
 
+
+	
