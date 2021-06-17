@@ -30,7 +30,7 @@ Key diagnostic figures and equations that define the composite filter are printe
 If you want to calibrate the chosen photometric system you can calculate the composite magnitude for a list 
 of sources with 
 ```python
-comp.estimate_mag(ra=ra,dec=dec)
+mags = comp.estimate_mag(ra=ra,dec=dec)
 ```
 where ra and dec are coordinates in degrees of the sources you wish to use for calibration. Calibrimbore will gather PS1 DR2 observations for 
 these sources via Vizier and calculate their composite magnitudes. We also account for extinction by calculating the expected extinction for 
