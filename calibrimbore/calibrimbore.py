@@ -11,11 +11,14 @@ from scipy.stats import iqr
 from extinction import fitzpatrick99, apply
 from copy import deepcopy
 from scipy.interpolate import UnivariateSpline
-# !!! Need the master branch version of astroquery https://github.com/astropy/astroquery !!!
+
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
+# !!! Need the master branch version of astroquery https://github.com/astropy/astroquery !!!
 from .bill import * 
+from .R_load import R_val
+
 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
@@ -29,12 +32,7 @@ def mag2flux(mag,zp=25):
 	f = 10**(2/5*(zp-mag))
 	return f
 
-def line(x, c1, c2): 
-	return c1 + c2*x #+ c3*x**2
 
-def func(vals,x,y):
-	fit = line(x,vals[0],vals[1])
-	return np.nansum(abs(fit-y))
 
 
 class sauron():
@@ -79,7 +77,8 @@ class sauron():
 	"""
 	def __init__(self,band=None,name=None,ps1_filters='auto',
 				 gr_lims=None,gi_lims=None,system='AB',
-				 plot=False,make_comp=True, cubic_corr=True):
+				 plot=False,make_comp=True, cubic_corr=True,
+				 calc_R=True):
 		"""
 		Setup the class.
 		"""
@@ -140,7 +139,8 @@ class sauron():
 				self.print_cubic_correction()
 			if plot:
 				self.diagnostic_plots()
-
+			if calc_R:
+				self.calculate_R(plot=True)
 			
 
 
@@ -242,8 +242,7 @@ class sauron():
 			return mags
 
 
-
-	def make_composite(self,coeff=None,mags=None):
+	def make_composite(self,coeff=None,mags=None,ext=None):
 		"""
 		Make composite magnitudes for the input band using the provided PS1 magnitudes.
 	
@@ -267,21 +266,45 @@ class sauron():
 			ps1_mags = self.ps1_mags
 		else:
 			ps1_mags = mags
+		if ext is not None:
+			gr = ps1_mags['g'] - ps1_mags['r']
+			Rg, Rg_e = R_val('g',gr=gr)
+			extg = Rg*ext
+			Rr, Rr_e = R_val('r',gr=gr)
+			extr = Rr*ext
+			Ri, Ri_e = R_val('i',gr=gr)
+			exti = Ri*ext
+			Rz, Rz_e = R_val('z',gr=gr)
+			extz = Rz*ext
+			Ry, Ry_e = R_val('y',gr=gr)
+			exty = Ry*ext
+		else:
+			extg = 0; extr = 0; exti = 0
+			extz = 0; exty = 0
+
+
 		r = 0; z = 0; y= 0	
-		g = mag2flux(ps1_mags['g'])
-		i = mag2flux(ps1_mags['i'])
+		g = mag2flux(ps1_mags['g']-extg)
+		i = mag2flux(ps1_mags['i']-exti)
 		if 'r' in self.ps1_filters:
-			r = mag2flux(ps1_mags['r'])
+			r = mag2flux(ps1_mags['r']-extr)
 		if 'z' in self.ps1_filters:
-			z = mag2flux(ps1_mags['z'])
+			z = mag2flux(ps1_mags['z']-extz)
 		if 'y' in self.ps1_filters:
-			y = mag2flux(ps1_mags['y'])
+			y = mag2flux(ps1_mags['y']-exty)
 
 		#if coeff is None:
 		coeff = self.coeff
 		comp = (coeff[0]*g + coeff[1]*r + coeff[2]*i +coeff[3]*z +
 				coeff[4]*y)*(g/i)**(coeff[5])
+
 		comp = -2.5*np.log10(comp) + 25 # default PS1 image zeropoint
+
+		if ext is not None:
+			if self.R_coeff is None:
+				self.calculate_R()
+			gr_int = (ps1_mags['g']-extg)-(ps1_mags['r']-extr)
+			comp += self.R_vector(x=gr_int)
 
 		if mags is None:
 			self.comp = comp
@@ -582,6 +605,14 @@ class sauron():
 
 		plt.tight_layout()
 
+	def R_vector(self,x=None): 
+		coeff = self.R_coeff
+		return coeff[0] + coeff[1]*x #+ c3*x**2
+
+	def minimize_R_vector(self,coeff,x,y):
+		self.R_coeff = coeff
+		fit = self.R_vector(x=x)
+		return np.nansum(abs(fit-y))
 
 	def calculate_R(self,plot=False):
 		"""
@@ -608,17 +639,19 @@ class sauron():
 
 
 		gr = self.ps1_mags['g'] - self.ps1_mags['r']
-		ind = (gr < 1) #& (gr > -.2)
+		if self.gr_lims is None:
+			ind = (gr < 1) #& (gr > -.2)
+		else:
+			ind = (gr > self.gr_lims[0]) & (gr < self.gr_lims[1])
 		x = deepcopy(gr)
 		x = x[ind]
 		y = ext[ind]
 
-		vals = minimize(func, [0,0,0], args=(x, y)).x
-		fit = line(x, vals[0], vals[1])
+		self.R_coeff = minimize(self.minimize_R_vector, [0,0], args=(x, y)).x
+		fit = self.R_vector(x=x)
 		clip = ~sigma_clip(y-fit,3,maxiters=10).mask
-		vals = minimize(func, [0,0], args=(x[clip], y[clip])).x
-
-		self.R_coeff = vals
+		self.R_coeff = minimize(self.minimize_R_vector, [0,0], 
+								args=(x[clip], y[clip])).x
 
 		if plot:
 			plt.figure(figsize=(1.5*fig_width,1*fig_width))
@@ -627,7 +660,7 @@ class sauron():
 			plt.xlabel('$(g-r)_{int}$',fontsize=15)
 			plt.ylabel('$R$',fontsize=15)
 			
-			s = r'$R=%(v2)s %(v1)s(g-r)_{int}$' % {'v1':str(np.round(vals[1],3)),'v2':str(np.round(vals[0],3))}
+			s = r'$R=%(v2)s %(v1)s(g-r)_{int}$' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
 			plt.text(.04,.05,s,transform=plt.gca().transAxes,fontsize=12)
 			#plt.title(s,fontsize=12)
 			#plt.text(.6,.8,bb[i-1],transform=plt.gca().transAxes,fontsize=15)
@@ -652,7 +685,7 @@ class sauron():
 		ebv : `array`
 			Array containing the estimated E(B-V) extinction for the sources
 		"""
-		ebv = np.zeros(len(mags)) * np.nan
+		ebv = np.zeros(len(mags['g'])) * np.nan
 
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
@@ -666,7 +699,8 @@ class sauron():
 		return ebv
 
 
-	def estimate_mag(self,mags=None,ra=None,dec=None):
+	def estimate_mag(self,mags=None,ra=None,dec=None,correction=True,extinction=True,
+					 gr_lims = None):
 		"""
 		Calculate the expected composite magnitude for all sources provided.
 		Either a table with the correct formatting or ra, and dec in deg can 
@@ -692,13 +726,39 @@ class sauron():
 		"""
 		if (ra is not None) & (dec is not None):
 			mags = get_ps1(ra, dec)
-
-		# stellar locus regression goes here
 		
+		gr = mags['g'] - mags['r']
+		mag2 = deepcopy(mags)
+		if gr_lims is not None:
+			ind = (gr > gr_lims[0]) & (gr < gr_lims[1])
+			mag2['g'] = mag2['g'][ind]; mag2['r'] = mag2['r'][ind]
+			mag2['i'] = mag2['i'][ind]; mag2['z'] = mag2['z'][ind]
+			mag2['y'] = mag2['y'][ind]
+			gr = gr[ind]
 
-		comp = self.make_composite(mags = mags)
+		if self.gr_lims is not None:
+			ind = (gr > gr_lims[0]) & (gr < gr_lims[1])
+			mag2['g'] = mag2['g'][ind]; mag2['r'] = mag2['r'][ind]
+			mag2['i'] = mag2['i'][ind]; mag2['z'] = mag2['z'][ind]
+			mag2['y'] = mag2['y'][ind]
+			gr = gr[ind]
 
-		return comp 
+
+		if extinction:
+			if self.R_coeff is None:
+				self.calculate_R()
+			ebv = self.get_extinctions(mag2)
+		else:
+			ebv = ebv = np.zeros(len(mag2['g']))
+
+
+		comp = self.make_composite(mags = mag2,ebv=ebv)
+		if correction:
+			comp -= self.cubic_correction(x=gr)
+
+		final = np.zeros(len(mags['g'])) * np.nan
+		final[ind] = comp
+		return final
 
 
 	def print_R(self):
