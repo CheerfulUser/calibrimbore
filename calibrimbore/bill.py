@@ -4,6 +4,7 @@ import numpy as np
 from astroquery.vizier import Vizier
 from astropy.table import Table
 from astropy import units as u
+from astropy.coordinates import SkyCoord, Angle
 
 
 import os
@@ -22,7 +23,7 @@ from glob import glob
 from copy import deepcopy
 from scipy.optimize import minimize
 from astropy.stats import sigma_clip
-#from .sigmacut import calcaverageclass
+from .sigmacut import calcaverageclass
 
 from scipy.interpolate import UnivariateSpline
 
@@ -31,9 +32,6 @@ inches_per_pt = 1.0/72.27               # Convert pt to inches
 golden_mean = (np.sqrt(5)-1.0)/2.0         # Aesthetic ratio
 fig_width = fig_width_pt*inches_per_pt  # width in inches
 
-
-import os
-package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
 g = np.loadtxt(package_directory + 'data/ps1_bands/ps1_g.dat')
 r = np.loadtxt(package_directory + 'data/ps1_bands/ps1_r.dat')
@@ -177,6 +175,50 @@ def synmag(spec, pb, zp=0.):
     m = -2.5*np.log10(flux) + zp
     return m
 
+def get_ps1_region(ra,dec,size=3):
+    """
+    Get PS1 observations for a list of coordinates.
+    ------
+    Inputs 
+    ra : 
+    """
+    if (type(ra) == float) | (type(ra) == np.float64):
+        ra = [ra]
+    if (type(dec) == float) | (type(dec) == np.float64):
+        dec = [dec]
+    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+    
+    Vizier.ROW_LIMIT = -1
+    
+    catalog = "II/349/ps1"
+    print('Querying regions with Vizier')
+    result = Vizier.query_region(coords, catalog=[catalog],
+                                 radius=Angle(size, "arcsec"))
+    no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or Vizier is unavailable')
+    #too_few_found_message = ValueError('No sources found brighter than {:0.1f}'.format(magnitude_limit))
+    if result is None:
+        raise no_targets_found_message
+    elif len(result) == 0:
+        raise no_targets_found_message
+    result = result[catalog].to_pandas()
+    r = deepcopy(result)
+    final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
+    final['ra'] = np.nan
+    final['dec'] = np.nan
+    final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
+    final['z'] = np.nan; final['y'] = np.nan
+    final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
+    final['z_e'] = np.nan; final['y_e'] = np.nan
+
+    final['g'] = r['gmag'].values; final['r'] = r['rmag'].values; final['i'] = r['imag'].values
+    final['z'] = r['zmag'].values; final['y'] = r['ymag'].values
+
+    final['g_e'] = r['e_gmag'].values; final['r_e'] = r['e_rmag'].values; final['i_e'] = r['e_imag'].values
+    final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
+    final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
+    final = final.drop(['temp'], axis=1)
+    return final
 
 def get_ps1(ra,dec,size=3):
     """
@@ -185,9 +227,9 @@ def get_ps1(ra,dec,size=3):
     Inputs 
     ra : 
     """
-    if type(ra) == float:
+    if (type(ra) == float) | (type(ra) == np.float64):
         ra = [ra]
-    if type(dec) == float:
+    if (type(dec) == float) | (type(dec) == np.float64):
         dec = [dec]
     coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
     
@@ -214,7 +256,7 @@ def get_ps1(ra,dec,size=3):
             (targets['_DEJ2000'].values[:,np.newaxis] - result['DEJ2000'].values[np.newaxis,:])**2)
 
     min_ind = np.argmin(dist,axis=1)
-    ind = np.nanmin(dist,axis=1) <= 3
+    ind = np.nanmin(dist,axis=1) <= size
 
     min_ind2 = np.argmin(dist,axis=0)
 
@@ -243,7 +285,7 @@ def Tonry_clip(Colours):
     """
     Use the Tonry 2012 PS1 splines to sigma clip the observed data.
     """
-    tonry = np.loadtxt(os.path.join(dirname,'Tonry_splines.txt'))
+    tonry = np.loadtxt(package_directory + '/data/Tonry_splines.txt')
     X = 'r-i'
     Y = 'g-r'
     x = Colours['obs r-i'][0,:]
@@ -492,9 +534,9 @@ def Make_colours(Data, Model, Compare, Extinction = 0, Redden = False,Tonry=Fals
     colours = {}
     for x,y in Compare:
         colours['obs ' + x] = np.array([Data[x.split('-')[0]].values - Data[x.split('-')[1]].values,
-                                        Data['e_'+x.split('-')[0]].values - Data['e_'+x.split('-')[1]].values])
-        colours['obs ' + y] = np.array([Data[y.split('-')[0]].values - Data[y.split('-')[1]+'mag'].values,
-                                        Data['e_'+y.split('-')[0]].values - Data['e_'+y.split('-')[1]].values])
+                                        Data[x.split('-')[0]+'_e'].values - Data[x.split('-')[1]+'_e'].values])
+        colours['obs ' + y] = np.array([Data[y.split('-')[0]].values - Data[y.split('-')[1]].values,
+                                        Data[y.split('-')[0]+'_e'].values - Data[y.split('-')[1]+'_e'].values])
         if Tonry:
             colours['mod ' + x] = Model[:,0]
             colours['mod ' + y] = Model[:,1]

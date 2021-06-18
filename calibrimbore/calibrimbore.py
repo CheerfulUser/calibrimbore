@@ -23,6 +23,7 @@ from .R_load import R_val
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
 
+
 fig_width_pt = 240.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27			   # Convert pt to inches
 golden_mean = (np.sqrt(5)-1.0)/2.0		 # Aesthetic ratio
@@ -304,7 +305,7 @@ class sauron():
 			if self.R_coeff is None:
 				self.calculate_R()
 			gr_int = (ps1_mags['g']-extg)-(ps1_mags['r']-extr)
-			comp += self.R_vector(x=gr_int)
+			comp += self.R_vector(x=gr_int)*ext
 
 		if mags is None:
 			self.comp = comp
@@ -689,13 +690,13 @@ class sauron():
 
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
-			cal_stars = get_ps1(mags.ra[i], mags.dec[i],size=.2*60**2)
-
+			cal_stars = get_ps1_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
+			
 			e, dat = Tonry_reduce(cal_stars)
 
-			dist = np.sqrt((mags.ra - mags.ra[i])**2 + (mags.dec - mags.dec[i])**2)
+			dist = np.sqrt((mags['ra'] - mags['ra'][i])**2 + (mags['dec'] - mags['dec'][i])**2)
 			ind = dist < .2*60**2
-			ebs[ind] = e
+			ebv[ind] = e
 		return ebv
 
 
@@ -729,33 +730,37 @@ class sauron():
 		
 		gr = mags['g'] - mags['r']
 		mag2 = deepcopy(mags)
+		
 		if gr_lims is not None:
 			ind = (gr > gr_lims[0]) & (gr < gr_lims[1])
-			mag2['g'] = mag2['g'][ind]; mag2['r'] = mag2['r'][ind]
-			mag2['i'] = mag2['i'][ind]; mag2['z'] = mag2['z'][ind]
-			mag2['y'] = mag2['y'][ind]
+			keys = list(mags.keys())
+			mag2={}
+			for key in keys:
+				mag2[key] = mags[key][ind]
+			gr = gr[ind]
+		elif self.gr_lims is not None:
+			ind = (gr > self.gr_lims[0]) & (gr < self.gr_lims[1])
+			keys = list(mags.keys())
+			mag2={}
+			for key in keys:
+				mag2[key] = mags[key][ind]
 			gr = gr[ind]
 
-		if self.gr_lims is not None:
-			ind = (gr > gr_lims[0]) & (gr < gr_lims[1])
-			mag2['g'] = mag2['g'][ind]; mag2['r'] = mag2['r'][ind]
-			mag2['i'] = mag2['i'][ind]; mag2['z'] = mag2['z'][ind]
-			mag2['y'] = mag2['y'][ind]
-			gr = gr[ind]
-
-
+		else:
+			ind = np.isfinite(gr)
+		
 		if extinction:
 			if self.R_coeff is None:
 				self.calculate_R()
 			ebv = self.get_extinctions(mag2)
 		else:
-			ebv = ebv = np.zeros(len(mag2['g']))
+			ebv = np.zeros(len(mag2['g']))
 
 
-		comp = self.make_composite(mags = mag2,ebv=ebv)
+		comp = self.make_composite(mags = mag2,ext=ebv)
 		if correction:
 			comp -= self.cubic_correction(x=gr)
-
+		
 		final = np.zeros(len(mags['g'])) * np.nan
 		final[ind] = comp
 		return final
