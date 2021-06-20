@@ -131,20 +131,9 @@ def synflux(spec, pb):
         Uses :py:func:`numpy.trapz` for interpolation.
     """
     overlap = pb.check_overlap(spec)
-    #if overlap == 'none':
-    #   return np.nan
-    #elif overlap == 'partial':
-    #   pass
-    #   if pb.check_sig(spec):
-    #      pass
-    #   else:
-    #      return np.nan
-    #else:
-    #   pass
     flux = spec.sample(pb.wave)
     n = np.trapz(flux*pb.wave*pb.throughput, pb.wave)
     d = np.trapz(pb.wave*pb.throughput, pb.wave)
-    #print(n,d)
     out = n/d
     return out
 
@@ -175,12 +164,26 @@ def synmag(spec, pb, zp=0.):
     m = -2.5*np.log10(flux) + zp
     return m
 
-def get_ps1_region(ra,dec,size=3):
+def get_ps1_region(ra,dec,size=0.2*60**2):
     """
-    Get PS1 observations for a list of coordinates.
+    Get PS1 observations for a region.
+    
     ------
     Inputs 
-    ra : 
+    ------
+    ra : `float`
+        RA of target
+    dec : `float`
+        Dec of target
+    size : `float`
+        Search radius in arcsec, 0.2 deg is a good default 
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant PS1 observations for each object entered 
+        with the ra and dec lists.
     """
     if (type(ra) == float) | (type(ra) == np.float64):
         ra = [ra]
@@ -196,7 +199,6 @@ def get_ps1_region(ra,dec,size=3):
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
-    #too_few_found_message = ValueError('No sources found brighter than {:0.1f}'.format(magnitude_limit))
     if result is None:
         raise no_targets_found_message
     elif len(result) == 0:
@@ -223,9 +225,23 @@ def get_ps1_region(ra,dec,size=3):
 def get_ps1(ra,dec,size=3):
     """
     Get PS1 observations for a list of coordinates.
+    
     ------
     Inputs 
-    ra : 
+    ------
+    ra : `list`/`array`
+        RA of target
+    dec : `list`/`array`
+        Dec of target
+    size : `float`
+        Search radius in arcsec, 3 arcsec is a good default.
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant PS1 observations for each object entered 
+        with the ra and dec lists.
     """
     if (type(ra) == float) | (type(ra) == np.float64):
         ra = [ra]
@@ -241,7 +257,6 @@ def get_ps1(ra,dec,size=3):
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
-    #too_few_found_message = ValueError('No sources found brighter than {:0.1f}'.format(magnitude_limit))
     if result is None:
         raise no_targets_found_message
     elif len(result) == 0:
@@ -341,8 +356,7 @@ def Tonry_reduce(Data,plot=False,savename=None):
     data = deepcopy(Data)
     tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
     compare = np.array([['r-i','g-r']])   
-    #cind =  ((data['campaign'].values == Camp))
-    dat = data#.iloc[cind]
+    dat = data
     clips = []
     if len(dat) < 10:
         raise ValueError('No data available')
@@ -358,7 +372,7 @@ def Tonry_reduce(Data,plot=False,savename=None):
         clip = Tonry_clip(colours)
         clips += [clip]
         dat = dat.iloc[clip]
-        #print('Pass ' + str(i+1) + ': '  + str(res.x[0]))
+        
     clips[0][clips[0]] = clips[1]
     if plot:
         orig = Make_colours(dat,tonry,compare,Extinction = 0, Tonry = True)
@@ -374,12 +388,15 @@ def Tonry_reduce(Data,plot=False,savename=None):
         plt.legend()
         if savename is not None:
             plt.savefig(savename + '_SLR.pdf', bbox_inches = "tight")
-    #clipped_data = data.iloc[clips[0]] 
+    
     return res.x, dat
 
 
 
 def sigma_mask(data,error= None,sigma=3,Verbose= False):
+    """
+    Mask data using the sigmacut class.
+    """
     if type(error) == type(None):
         error = np.zeros(len(data))
     
@@ -403,9 +420,6 @@ def Get_lcs(X,Y,K,Colours,fitfilt = ''):
     yind = 'mod ' + Y == keys
     y = Colours[keys[yind][0]]
 
-    #x_interp = np.arange(np.nanmin(x),0.8,0.01)
-    #inter = interpolate.interp1d(x,y)
-    #l_interp = inter(x_interp)
     locus = np.array([x,y])
 
     xind = 'obs ' + X == keys
@@ -425,26 +439,6 @@ def Get_lcs(X,Y,K,Colours,fitfilt = ''):
     if c4 == fitfilt: ob_y[0,:] -= K
     return ob_x, ob_y, locus
 
-def Dot_prod_error(x,y,Model):
-    """
-    Calculate the error projection in the direction of a selected point.
-    ------------------
-    Currently not used
-    ------------------
-    """
-    #print(Model.shape)
-    adj = y[0,:] - Model[1,:]
-    op = x[0,:] - Model[0,:]
-    #print(adj.shape,op.shape)
-    hyp = np.sqrt(adj**2 + op**2)
-    costheta = adj / hyp
-    yerr_proj = abs(y[1,:] * costheta)
-    xerr_proj = abs(x[1,:] * costheta)
-    
-    proj_err = yerr_proj + xerr_proj
-    #print(proj_err)
-    return proj_err 
-
 
 def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
     """
@@ -453,25 +447,25 @@ def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
     ------
     Inputs
     ------
-    X : str
+    X : `str`
         string containing the colour combination for the X axis 
-    Y : str
+    Y : `str`
         string containing the colour combination for the Y axis 
-    K : str 
+    K : `str`
         Not sure...
-    Colours : dict
+    Colours : `dict`
         dictionary of colour combinations for all sources 
-    fitfilt : str 
+    fitfilt : `str`
          Not used...
-     Tensor : bool
+     Tensor : `bool`
         if true this returns the distance tensor instead of the total sum
-    Plot : bool
+    Plot : `bool`
         if true this makes diagnotic plots
 
     -------
     Returns
     -------
-    residual : float
+    residual : `float`
         residuals of distances from all points to the model locus. 
     """
     ob_x, ob_y, locus = Get_lcs(X,Y,K,Colours,fitfilt)
@@ -487,8 +481,6 @@ def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
         plt.title(X + ' ' + Y)
         plt.plot(ob_x[0,:],ob_y[0,:],'.')
         plt.plot(locus[0,:],locus[1,:])
-    #print(ob_x.shape)
-    #print('x ',ob_x.shape[1])
 
     x = np.zeros((ob_x.shape[1],locus.shape[1])) + ob_x[0,:,np.newaxis]
     x -= locus[0,np.newaxis,:]
@@ -496,8 +488,6 @@ def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
     y -= locus[1,np.newaxis,:]
 
     dist_tensor = np.sqrt(x**2 + y**2)
-    #print(np.nanmin(dist_tensor,axis=1))
-    #print(X + Y +' dist ',dist_tensor.shape)
     
     if len(dist_tensor[np.isfinite(dist_tensor)]) > 1:
         minind = np.nanargmin(abs(dist_tensor),axis=1)
@@ -508,27 +498,50 @@ def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
         eh = mindist * sign
     
         proj_err = Dot_prod_error(ob_x,ob_y,locus[:,minind])
-        #print('mindist ',mindist)
+        
         if Tensor:
             return eh
         if len(mindist) > 0:
-            #print('thingo',np.nanstd(mindist))
             residual = np.nansum(abs(mindist)) #/ proj_err)
         else:
-            #print('infs')
             residual = np.inf
     else:
         if Tensor:
             return []
         residual = np.inf
-        #residual += 100*np.sum(np.isnan(dist))
-    #print(residual)
+
     cut_points = len(indo) - len(ind)
     return residual + cut_points * 100
 
 
 def Make_colours(Data, Model, Compare, Extinction = 0, Redden = False,Tonry=False):
-    #R = {'g': 3.518, 'r':2.617, 'i':1.971, 'z':1.549, 'y': 1.286, 'k':2.431,'tess':1.809}#'z':1.549} # value from bayestar
+    """
+    Make dictionaries of colour combinations used in stellar locus regression code.
+
+    ------
+    Inputs
+    ------
+    Data : pandas DataFrame
+        Contains the PS1 photometry in the required format
+    Model : pandas DataFrame
+        Contains the model PS1 photometry
+    Compare : `list`
+        List of tuples containing the colours to compare.
+    Extinction : `float`
+        Extinction in terms of `E(B-V)` to be applied to the photometry
+    Redden : `bool`
+        Switch to apply the extinction to the model data
+    Tonry : `bool`
+        Switch to comparing against the Tonry 2012 PS1 stellar locus.
+        This is used for determining the extinction
+
+    -------
+    Returns
+    -------
+    colours : `dict`
+        Dictionary containing the model and observed colours used for 
+        calibrating data through stellar locus regression.
+    """
     R = {'g': 3.61562687, 'r':2.58602003, 'i':1.90959054, 
          'z':1.50168735, 'y': 1.25340149}
     colours = {}

@@ -30,6 +30,9 @@ golden_mean = (np.sqrt(5)-1.0)/2.0		 # Aesthetic ratio
 fig_width = fig_width_pt*inches_per_pt  # width in inches
 
 def mag2flux(mag,zp=25):
+	"""
+	Convert magnitude to flux
+	"""
 	f = 10**(2/5*(zp-mag))
 	return f
 
@@ -41,6 +44,13 @@ class sauron():
 	One System to rule them all, One System to find them, 
 	One System to bring them all and in the darkness bind them.
 
+
+	Creates a composite filter using PS1 filters of the input band.
+	This allows for direct comparison between the well calibrated 
+	PS1 system and any other optical photometric system. With 
+	calibrimbore we can calibrate all systems to PS1. 
+
+	------
 	Inputs
 	------
 	band : `str`
@@ -132,16 +142,23 @@ class sauron():
 		if make_comp:
 			if plot:
 				self.coverage_plot()
+			# calculate the expected Calspec mags in the band
 			self.syn_calspec_mags()
+			# fit the composite using the expected mags
 			self.fit_comp()
-			self.print_func()
+			# print the composite function in a nice way
+			self.print_comp()
 			if cubic_corr:
+				# calculate a cubic polynomial to correct color
 				self.fit_cubic_correction()
+				# print the cubic corrector function in a nice way
 				self.print_cubic_correction()
 			if plot:
+				# make useful plot 
 				self.diagnostic_plots()
 			if calc_R:
-				self.calculate_R(plot=True)
+				# calculate the extinction vector coefficients
+				self.calculate_R(plot=plot)
 			
 
 
@@ -314,7 +331,7 @@ class sauron():
 
 	def comp_minimizer(self,coeff):
 		"""
-		Function to minimize for fitting filter coefficients 
+		Function to minimize for fitting filter coefficients.
 		
 		------
 		Inputs
@@ -404,7 +421,6 @@ class sauron():
 			c0[c0<0.01] = 0
 		except:
 			c0 = self.make_c0()
-		#c0[:-1] = 1/len(self.ps1_filters)
 
 		bds = self.make_bds()
 
@@ -415,8 +431,30 @@ class sauron():
 		self.coeff = res.x 
 		self.fit_res = res
 
+	def print_comp(self):
+		"""
+		Print the composite flux function in a nice way.
+		"""
+		from IPython.display import display, Math
+		eqn = r'$f_{comp}=\left('
+
+		var = ['f_g','f_r','f_i','f_z','f_y']
+		for i in range(5):
+			if self.coeff[i] > 0.01:
+				eqn += str(np.round(self.coeff[i],3)) + var[i] 
+				if (i < 4) & (self.coeff[i+1:-1] > 0.01).any():
+					eqn += '+'
+		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
+
+		display(Math(eqn))
+
+
+	
 
 	def cubic_correction(self,x=None):
+		"""
+		Standard cubic polynomial
+		"""
 		if x is None:
 			x = self.gr
 		coeff = self.cubic_coeff
@@ -424,6 +462,9 @@ class sauron():
 		return fit
 
 	def cube_min_func(self,coeff):
+		"""
+		Minimizer for the cubic function.
+		"""
 		self.cubic_coeff = coeff
 		y = self.diff[self.mask]
 
@@ -432,6 +473,9 @@ class sauron():
 		return abs(diff)
 
 	def fit_cubic_correction(self):
+		"""
+		Fitting function for the cubic correction polynomial.
+		"""
 		c0 = [0,0,0,0]
 		res = minimize(self.cube_min_func,c0)
 		self.cubic_coeff = res.x
@@ -441,6 +485,9 @@ class sauron():
 		self.cubic_coeff = res.x
 
 	def print_cubic_correction(self):
+		"""
+		Print the cubic correction polynomial with nice formatting.
+		"""
 		from IPython.display import display, Math
 		coeff = self.cubic_coeff
 		eqn = r'$m_c=' + str(np.round(coeff[0],3)) 
@@ -464,10 +511,11 @@ class sauron():
 		"""
 		plt.figure(figsize=(1.5*fig_width,1*fig_width))
 
-		plt.fill_between(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),color='k',alpha=0.05)
-		plt.plot(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),color='grey',label='$TESS$')
-		#plt.text(6900,0.3,'$TESS$',color='grey',fontsize=30)
-		colors = ['g','r','k','m','sienna']
+		plt.fill_between(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),
+						 color='k',alpha=0.05)
+		plt.plot(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),
+				 color='grey',label='$TESS$')
+		colors = ['g','r','k','m','sienna']	
 		filts = 'grizy'
 		k = 0
 		for f in filts:
@@ -516,10 +564,7 @@ class sauron():
 
 		self.make_composite()
 		self.diff = (self.mags - self.comp)[ind]
-		#if spline:
-
 		self.mask = ~sigma_clip(self.diff,sigma=3).mask
-		#self.make_spline()
 		 
 		diff = (self.diff[self.mask])*1e3# - self.spline(x[self.mask])) * 1e3
 
@@ -607,10 +652,16 @@ class sauron():
 		plt.tight_layout()
 
 	def R_vector(self,x=None): 
+		"""
+		Extinction vector coefficient vector (nothing is constant!).
+		"""
 		coeff = self.R_coeff
 		return coeff[0] + coeff[1]*x #+ c3*x**2
 
 	def minimize_R_vector(self,coeff,x,y):
+		"""
+		Minimizing function for the extinction vector
+		"""
 		self.R_coeff = coeff
 		fit = self.R_vector(x=x)
 		return np.nansum(abs(fit-y))
@@ -778,22 +829,3 @@ class sauron():
 			eqn = r'$R=%(v2)s %(v1)s(g-r)_{int}$' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
 			display(Math(eqn))
 
-	def print_func(self):
-		"""
-		Print the composite flux function in a nice way.
-		"""
-		from IPython.display import display, Math
-		eqn = r'$f_{comp}=\left('
-
-		var = ['f_g','f_r','f_i','f_z','f_y']
-		for i in range(5):
-			if self.coeff[i] > 0.01:
-				eqn += str(np.round(self.coeff[i],3)) + var[i] 
-				if (i < 4) & (self.coeff[i+1:-1] > 0.01).any():
-					eqn += '+'
-		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
-
-		display(Math(eqn))
-
-
-	
