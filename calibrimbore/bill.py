@@ -1,4 +1,3 @@
-
 import pysynphot as S
 import numpy as np
 from astroquery.vizier import Vizier
@@ -26,6 +25,9 @@ from astropy.stats import sigma_clip
 from .sigmacut import calcaverageclass
 
 from scipy.interpolate import UnivariateSpline
+
+cas_id = os.environ.get('CASJOBS_WSID')
+cas_pwd = os.environ.get('CASJOBS_PW')
 
 fig_width_pt = 240.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27               # Convert pt to inches
@@ -221,6 +223,49 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
     final = final.drop(['temp'], axis=1)
     return final
+
+def query_casjob_ps1(ra,dec,size=3):
+    import mastcasjobs
+    query = """SELECT o.objID,
+                o.raMean as ra, o.decMean as dec, o.raMeanErr, o.decMeanErr,
+                o.gMeanPSFMag as g, o.gMeanPSFMagErr as g_e,
+                o.rMeanPSFMag as r, o.rMeanPSFMagErr as r_e,
+                o.iMeanPSFMag as i, o.iMeanPSFMagErr as i_e,
+                o.zMeanPSFMag as z, o.zMeanPSFMagErr as z_e,
+                o.yMeanPSFMag as y, o.yMeanPSFMagErr as y_e,
+                o.nDetections, o.ng, o.nr, o.ni, o.nz,o.ny,
+                o.gFlags, o.gQfPerfect,
+                o.rFlags, o.rQfPerfect,
+                o.iFlags, o.iQfPerfect,
+                o.zFlags, o.zQfPerfect,
+                o.yFlags, o.yQfPerfect
+                FROM dbo.fGetNearbyObjEq({},{},{}/60.0) as x
+                JOIN MeanObjectView o on o.ObjID=x.ObjId
+                LEFT JOIN StackObjectAttributes AS soa ON soa.objID = x.objID
+                WHERE o.nDetections>5
+                AND soa.primaryDetection>0
+                AND o.gQfPerfect>0.85 and o.rQfPerfect>0.85 and o.iQfPerfect>0.85 and o.zQfPerfect>0.85
+                """.format(ra,dec,size)# % {'ra':ra,'dec':dec,'size':size}
+    jobs = mastcasjobs.MastCasJobs(userid=cas_id, password=cas_pwd, context="PanSTARRS_DR2")
+    results = jobs.quick(query, task_name="python cone search")
+    if len(results) == 0:
+        empty = np.ones(len(results.keys())) * -999
+        results.add_row(vals=empty)
+    results = results.to_pandas()
+    results = results.replace(to_replace=-999,value=np.nan)
+    return results
+
+def ps1_casjobs(ra,dec,size=3):
+    
+    for i in range(len(ra)):
+        tab = query_casjob_ps1(ra[i],dec[i],size)
+        if i == 0:
+            result = tab
+        else:
+            result = result.append(tab, ignore_index=True)
+    #ind = result.values < -900
+    #result.iloc[ind] = np.nan
+    return result
 
 def get_ps1(ra,dec,size=3):
     """

@@ -89,7 +89,7 @@ class sauron():
 	def __init__(self,band=None,name=None,ps1_filters='auto',
 				 gr_lims=None,gi_lims=None,system='AB',
 				 plot=False,make_comp=True, cubic_corr=True,
-				 calc_R=True):
+				 calc_R=True,obstable=None, savename=None):
 		"""
 		Setup the class.
 		"""
@@ -97,6 +97,7 @@ class sauron():
 		self.name = name
 		self.zp = None
 		self.system = system.lower()
+		self.savename = savename
 		self.load_band()
 		self.ps1_overlap = None
 		if ps1_filters.lower() == 'auto':
@@ -142,8 +143,11 @@ class sauron():
 		if make_comp:
 			if plot:
 				self.coverage_plot()
-			# calculate the expected Calspec mags in the band
-			self.syn_calspec_mags()
+			if obstable is None:
+				# calculate the expected Calspec mags in the band
+				self.syn_calspec_mags()
+			else:
+				self.assign_mags(obstable)
 			# fit the composite using the expected mags
 			self.fit_comp()
 			# print the composite function in a nice way
@@ -260,6 +264,29 @@ class sauron():
 			return mags
 
 
+	def assign_mags(self,obstable):
+		"""
+		Assign PS1 magnitudes and magnitudes in the fitting filter from an input table.
+		
+		-----
+		Input
+		-----
+		obstable : dict or dataframe
+			Table containing only the observed magnitudes, no errors. Format 
+			must have one entry for the filter to be calibrated, the entry name MUST 
+			exclude 'ps1'. Entries containing the PS1 magnitudes must have the format of 
+			'band' + 'ps1', i.e. 'gps1' for g band. 
+
+		"""
+		keys = list(obstable.keys())
+		for key in keys:
+			if 'ps1' in key.lower():
+				self.ps1_mags[key[0]] = obstable[key]
+			else:
+				self.mags = obstable[key]
+
+
+
 	def make_composite(self,coeff=None,mags=None,ext=None):
 		"""
 		Make composite magnitudes for the input band using the provided PS1 magnitudes.
@@ -364,7 +391,7 @@ class sauron():
 			res = np.nansum(abs(self.diff[self.mask]))
 		return res
 
-	def make_c0(self):
+	def _make_c0(self):
 		"""
 		Set up the initial ceofficient guesses for when the filters are manually defined 
 		(its pretty lazy!).
@@ -382,7 +409,7 @@ class sauron():
 			c0[4] += 0.1
 		return c0
 
-	def make_bds(self):
+	def _make_bds(self):
 		"""
 		Make the boundary for the coefficients. This enforces that 
 		all flux contributions are positive and only selected bands 
@@ -420,9 +447,9 @@ class sauron():
 			c0 = np.append(self.ps1_overlap,0)
 			c0[c0<0.01] = 0
 		except:
-			c0 = self.make_c0()
+			c0 = self._make_c0()
 
-		bds = self.make_bds()
+		bds = self._make_bds()
 
 		res = minimize(self.comp_minimizer,c0,bounds=bds)
 		self.mask = ~sigma_clip(self.diff,sigma=3).mask
@@ -430,23 +457,6 @@ class sauron():
 
 		self.coeff = res.x 
 		self.fit_res = res
-
-	def print_comp(self):
-		"""
-		Print the composite flux function in a nice way.
-		"""
-		from IPython.display import display, Math
-		eqn = r'$f_{comp}=\left('
-
-		var = ['f_g','f_r','f_i','f_z','f_y']
-		for i in range(5):
-			if self.coeff[i] > 0.01:
-				eqn += str(np.round(self.coeff[i],3)) + var[i] 
-				if (i < 4) & (self.coeff[i+1:-1] > 0.01).any():
-					eqn += '+'
-		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
-
-		display(Math(eqn))
 
 
 	
@@ -461,7 +471,7 @@ class sauron():
 		fit = coeff[0] + coeff[1] * x + coeff[2] * x**2 + coeff[3] * x**3
 		return fit
 
-	def cube_min_func(self,coeff):
+	def _cube_min_func(self,coeff):
 		"""
 		Minimizer for the cubic function.
 		"""
@@ -477,12 +487,29 @@ class sauron():
 		Fitting function for the cubic correction polynomial.
 		"""
 		c0 = [0,0,0,0]
-		res = minimize(self.cube_min_func,c0)
+		res = minimize(self._cube_min_func,c0)
 		self.cubic_coeff = res.x
 		mask = sigma_clip(self.diff-self.cubic_correction(),sigma=3).mask
 		self.mask[mask] = False
-		res = minimize(self.cube_min_func,c0)
+		res = minimize(self._cube_min_func,c0)
 		self.cubic_coeff = res.x
+
+
+	def print_comp(self):
+		"""
+		Print the composite flux function in a nice way.
+		"""
+		from IPython.display import display, Math
+		eqn = r'$f_{comp}=\left('
+
+		var = ['f_g','f_r','f_i','f_z','f_y']
+		for i in range(5):
+			if self.coeff[i] > 0.01:
+				eqn += str(np.round(self.coeff[i],3)) + var[i] 
+				if (i < 4) & (self.coeff[i+1:-1] > 0.01).any():
+					eqn += '+'
+		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
+		display(Math(eqn))
 
 	def print_cubic_correction(self):
 		"""
@@ -541,6 +568,10 @@ class sauron():
 		plt.xlabel(r'Wavelength $\left(\rm \AA \right)$',fontsize=15)
 		plt.tight_layout()
 
+		if self.savename is not None:
+			plt.savefig(self.savename + '_coverage.pdf')
+
+
 	def diagnostic_plots(self,spline=True):
 		"""
 		Plots to show how good the fit is.
@@ -578,6 +609,10 @@ class sauron():
 		else:
 			plt.figure(figsize=(3*fig_width,1*fig_width))
 			plt.subplot(121)
+		
+		if self.name is not None:
+			plt.suptitle(self.name)
+
 		b = int(np.nanmax(diff) - np.nanmin(diff) /(2*iqr(diff)*len(diff)**(-1/3)))
 		if b > 10:
 			b = 10
@@ -651,6 +686,9 @@ class sauron():
 
 		plt.tight_layout()
 
+		if self.savename is not None:
+			plt.savefig(self.savename+'_residuals.pdf')
+
 	def R_vector(self,x=None): 
 		"""
 		Extinction vector coefficient vector (nothing is constant!).
@@ -658,7 +696,7 @@ class sauron():
 		coeff = self.R_coeff
 		return coeff[0] + coeff[1]*x #+ c3*x**2
 
-	def minimize_R_vector(self,coeff,x,y):
+	def _minimize_R_vector(self,coeff,x,y):
 		"""
 		Minimizing function for the extinction vector
 		"""
@@ -699,10 +737,10 @@ class sauron():
 		x = x[ind]
 		y = ext[ind]
 
-		self.R_coeff = minimize(self.minimize_R_vector, [0,0], args=(x, y)).x
+		self.R_coeff = minimize(self._minimize_R_vector, [0,0], args=(x, y)).x
 		fit = self.R_vector(x=x)
 		clip = ~sigma_clip(y-fit,3,maxiters=10).mask
-		self.R_coeff = minimize(self.minimize_R_vector, [0,0], 
+		self.R_coeff = minimize(self._minimize_R_vector, [0,0], 
 								args=(x[clip], y[clip])).x
 
 		if plot:
@@ -717,6 +755,9 @@ class sauron():
 			#plt.title(s,fontsize=12)
 			#plt.text(.6,.8,bb[i-1],transform=plt.gca().transAxes,fontsize=15)
 			plt.tight_layout()
+
+			if self.savename is not None:
+				plt.savefig(self.savename + '_r_vector.pdf')
 
 
 	def get_extinctions(self,mags):
@@ -752,7 +793,7 @@ class sauron():
 
 
 	def estimate_mag(self,mags=None,ra=None,dec=None,correction=True,extinction=True,
-					 gr_lims = None):
+					 gr_lims = None,size=3,catalog='vizier'):
 		"""
 		Calculate the expected composite magnitude for all sources provided.
 		Either a table with the correct formatting or ra, and dec in deg can 
@@ -776,9 +817,22 @@ class sauron():
 		comp : `array`
 			Composite magnitudes created for the targets of interest.
 		"""
+		print(cas_id)
 		if (ra is not None) & (dec is not None):
-			mags = get_ps1(ra, dec)
+			if catalog.lower() == 'vizier':
+				mags = get_ps1(ra, dec, size)
+			elif catalog.lower == 'casjobs':
+				if (cas_id is not None) & (cas_pwd is not None):
+					print('Using CASJobs to access PS1 DR2')
+					mags = ps1_casjobs(ra, dec, size)
+				else:	
+					print('No CASJobs credentials saved, so using Vizier to access PS1 DR1')
+					mags = get_ps1(ra, dec, size)
 		
+		if mags is None:
+			m = 'No sources provided! Either give an ra-dec list, or a table with the appropriate format'
+			raise ValueError(m)
+
 		gr = mags['g'] - mags['r']
 		mag2 = deepcopy(mags)
 		
@@ -826,6 +880,9 @@ class sauron():
 			return
 		else:
 			from IPython.display import display, Math
-			eqn = r'$R=%(v2)s %(v1)s(g-r)_{int}$' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
+			if self.name is None:
+				eqn = r'$R=%(v2)s %(v1)s(g-r)_{int}$' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
+			else:
+				eqn = r'$R_%(name)=%(v2)s %(v1)s(g-r)_{int}$' % {'name':self.name,'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
 			display(Math(eqn))
 
