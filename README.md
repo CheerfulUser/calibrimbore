@@ -1,7 +1,8 @@
 Calibrimbore
 ============
 
-# *One System to rule them all, One System to find them, One System to bring them all and in the darkness bind them.*
+*One System to rule them all, One System to find them, One System to bring them all and in the darkness bind them.*
+-------------------------------------------------------------------------------------------------------------------
 
 Creates a composite filter using PS1 grizy filters of the input band. This allows for direct comparison between the well calibrated PS1 system and any other optical photometric system. With calibrimbore we can calibrate all optical photometric systems to PS1.
 
