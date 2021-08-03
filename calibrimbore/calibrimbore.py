@@ -11,6 +11,8 @@ from scipy.stats import iqr
 from extinction import fitzpatrick99, apply
 from copy import deepcopy
 from scipy.interpolate import UnivariateSpline
+from astropy.io import ascii
+from astropy.table import Table
 
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
@@ -504,12 +506,57 @@ class sauron():
 
 		var = ['f_g','f_r','f_i','f_z','f_y']
 		for i in range(5):
-			if self.coeff[i] > 0.01:
+			if self.coeff[i] > 0.001:
 				eqn += str(np.round(self.coeff[i],3)) + var[i] 
-				if (i < 4) & (self.coeff[i+1:-1] > 0.01).any():
+				if (i < 4) & (self.coeff[i+1:-1] > 0.001).any():
 					eqn += '+'
 		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
 		display(Math(eqn))
+
+	def ascii_comp(self):
+		"""
+		Returns the composite flux equation in ascii equation format.
+		"""
+		eqn = 'f_(comp)=('
+
+		var = ['f_g','f_r','f_i','f_z','f_y']
+		for i in range(5):
+			if self.coeff[i] > 0.001:
+				eqn += str(np.round(self.coeff[i],3)) + var[i] 
+				if (i < 4) & (self.coeff[i+1:-1] > 0.001).any():
+					eqn += '+'
+		eqn += r')(f_g/f_i)^(' + str(np.round(self.coeff[5],3)) + ')'
+		return eqn
+
+	def save_transform(self,save_fmt='ascii',name=None):
+		coeffs = Table()
+		var = ['fg','fr','fi','fz','fy']
+		c = self.coeff
+		c[abs(c) < 0.001] = 0
+		for i in range(5):
+			coeffs[var[i]] = np.array([c[i]])
+		coeffs['fg/fr'] = np.array([c[5]])
+
+		
+		if self.cubic_coeff is not None:
+			coeffs['mc_gr'] = np.array([self.cubic_coeff[0]])
+			coeffs['mc_gr2'] = np.array([self.cubic_coeff[1]])
+			coeffs['mc_gr3'] = np.array([self.cubic_coeff[2]])
+
+		if name is None:
+			if self.name is None:
+				name = 'coeffs'
+			else:
+				name = self.name 
+		if save_fmt.lower() == 'ascii':
+			ascii.write(coeffs, name + '.dat', overwrite=True)
+			print('saved as ' + name + '.dat')
+		elif save_fmt.lower() == 'csv':
+			coeffs = coeffs.to_pandas()
+			coeffs.to_csv(name+'.csv',index=False)
+			print('saved as ' + name + '.csv')
+
+
 
 	def print_cubic_correction(self):
 		"""
@@ -529,6 +576,22 @@ class sauron():
 		eqn += str(np.round(coeff[3],4)) + '(g-r)^3'
 		display(Math(eqn))
 
+	def ascii_cubic_correction(self):
+		"""
+		Returns the cubic correction equation in ascii equation format.
+		"""
+		coeff = self.cubic_coeff
+		eqn = 'm_c=' + str(np.round(coeff[0],3)) 
+		if coeff[1] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[1],4)) + '(g-r)' 
+		if coeff[2] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[2],4)) + '(g-r)^2' 
+		if coeff[3] > 0:
+			eqn += '+'
+		eqn += str(np.round(coeff[3],4)) + '(g-r)^3'
+		return eqn
 
 	def coverage_plot(self):
 		"""
@@ -885,4 +948,16 @@ class sauron():
 			else:
 				eqn = r'$R_%(name)=%(v2)s %(v1)s(g-r)_{int}$' % {'name':self.name,'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
 			display(Math(eqn))
+
+	def ascii_R(self):
+		"""
+		Return the R coefficient function in ascii.
+		"""
+		if self.R_coeff is None:
+			print('R coefficients have not been derived.')
+			return
+		else:
+			eqn = 'R=%(v2)s %(v1)s(g-r)_(int)' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
+			
+			return eqn
 
