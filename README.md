@@ -27,6 +27,19 @@ to best replicate the chosen bandpass, calculate a residual cubic colour correct
 the extinction vector coefficient as a function of colour according to the Fitzpatrick 99 extinction function.
 Key diagnostic figures and equations that define the composite filter are printed if `plot` is `True`.
 
+To get the equations in the ascii string for, you can use the following functions:
+```python
+comp.ascii_comp()
+comp.ascii_cubic_correction()
+comp.ascii_R()
+```
+
+To save the composite and correction function coefficients for a filter use:
+```python
+comp.save_transform(name='test_filter',save_fmt='ascii')
+```
+either ascii or csv can be selected for `save_fmt`.
+
 If you want to calibrate the chosen photometric system you can calculate the composite magnitude for a list 
 of sources with 
 ```python
