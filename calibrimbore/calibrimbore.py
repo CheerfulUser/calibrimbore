@@ -528,7 +528,7 @@ class sauron():
 		eqn += r')(f_g/f_i)^(' + str(np.round(self.coeff[5],3)) + ')'
 		return eqn
 
-	def save_transform(self,save_fmt='ascii',name=None):
+	def save_transform(self,name=None,save_fmt='ascii'):
 		coeffs = Table()
 		var = ['fg','fr','fi','fz','fy']
 		c = self.coeff
