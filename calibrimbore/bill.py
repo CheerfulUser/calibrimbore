@@ -47,19 +47,19 @@ ps1_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'z': S.ArrayBandpass(z[:,0],z[:,1]),
              'y': S.ArrayBandpass(y[:,0],y[:,1])}
 
-g = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_g.dat')
-r = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_r.dat')
-i = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_i.dat')
-z = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_z.dat')
-v = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_v.dat')
-u = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_u.dat')
+g = np.loadtxt(package_directory + 'data/skymapper_bands/sm_g.dat')
+r = np.loadtxt(package_directory + 'data/skymapper_bands/sm_r.dat')
+i = np.loadtxt(package_directory + 'data/skymapper_bands/sm_i.dat')
+z = np.loadtxt(package_directory + 'data/skymapper_bands/sm_z.dat')
+#v = np.loadtxt(package_directory + 'data/skymapper_bands/sm_v.dat')
+#u = np.loadtxt(package_directory + 'data/skymapper_bands/sm_u.dat')
 
-sm_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
+skymapper_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'r': S.ArrayBandpass(r[:,0],r[:,1]),
              'i': S.ArrayBandpass(i[:,0],i[:,1]),  
-             'z': S.ArrayBandpass(z[:,0],z[:,1]),
-             'v': S.ArrayBandpass(v[:,0],v[:,1]),
-             'u': S.ArrayBandpass(u[:,0],u[:,1])}
+             'z': S.ArrayBandpass(z[:,0],z[:,1])}
+             #'v': S.ArrayBandpass(v[:,0],v[:,1]),
+             #'u': S.ArrayBandpass(u[:,0],u[:,1])}
 
 def get_pb_zpt(pb, reference='AB', model_mag=None):
     """
@@ -416,7 +416,7 @@ def get_ps1(ra,dec,size=3):
     final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
 
     final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
-    
+
     return final 
 
 

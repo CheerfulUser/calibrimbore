@@ -89,7 +89,7 @@ class sauron():
 		correction will be calculated for the composite magnitude.
 	"""
 	def __init__(self,band=None,name=None,system='ps1',filters='auto',
-				 gr_lims=None,gi_lims=None,system='AB',
+				 gr_lims=None,gi_lims=None,mag_system='AB',
 				 plot=False,make_comp=True, cubic_corr=True,
 				 calc_R=True,obstable=None, savename=None):
 		"""
@@ -98,18 +98,18 @@ class sauron():
 		self.band = band
 		self.name = name
 		self.zp = None
+		self.mag_system = mag_system.lower()
 		self.system = system.lower()
 		self._check_system()
 		self.savename = savename
-		self.load_band()
-		self.system = system
-		self._sys_bands = self._load_sys_bands()
+		self._load_band()
+		self._load_sys_bands()
 		self.overlap = None
 		if filters.lower() == 'auto':
 			# Identify relevant system filters to use 
 			self.sys_filters = ''
 			self.filter_overlap()
-			print('Making a composite filter of '+ self.band + ' ' + self.system)
+			print('Making a composite filter of input band and ' + self.system)
 		else:
 			self.filters = filters
 		
@@ -119,7 +119,7 @@ class sauron():
 
 
 		# Defined:
-		if self.system == 'ab':
+		if self.mag_system == 'ab':
 			self.sys_mags = self._load_sys_mags()
 
 		# actually makes no sense to do this here since all PS1 is in AB
@@ -180,11 +180,11 @@ class sauron():
 
 	def _check_system(self):
 		allowed = np.array(['ps1','skymapper'])
-		if ~(self.system == allowed).amy():
+		if ~(self.system == allowed).any():
 			m = self.system + ' is not supported. Select from: \nps1 \nskymapper'
 			raise ValueError(m)
 
-	def load_band(self):
+	def _load_band(self):
 		"""
 		Load in the band to sauron. Can either be a string or a numpy array.
 		"""
@@ -199,7 +199,7 @@ class sauron():
 		b = S.ArrayBandpass(band[:,0], band[:,1], waveunits='Angstrom',name=self.name)
 		self.band = b
 		# get the theoretical zeropoint for the loaded bandpass
-		self.zp = get_pb_zpt(self.band, reference=self.system, model_mag=0)
+		self.zp = get_pb_zpt(self.band, reference=self.mag_system, model_mag=0)
 
 
 
@@ -223,12 +223,12 @@ class sauron():
 		"""
 		bands = ''
 		percentage = []
-		bands = self._sys_bands
-		pbs = list(bands.keys()) 
+		sys_bands = self._sys_bands
+		pbs = list(sys_bands.keys()) 
 
 		for pb in pbs:
-			band = bands[pb]
-			func = interp1d(band.wave,band.throughput,bounds_error=False,fill_value=0)
+			sys_band = sys_bands[pb]
+			func = interp1d(sys_band.wave,sys_band.throughput,bounds_error=False,fill_value=0)
 			overlap = (np.trapz(func(self.band.wave) * self.band.throughput, x = self.band.wave) / 
 					   np.trapz(self.band.throughput, x = self.band.wave))
 			percentage += [overlap]
@@ -350,7 +350,7 @@ class sauron():
 			z = mag2flux(sys_mags['z']-self._get_extinction('z', ext))
 		if 'y' in self.sys_filters:
 			y = mag2flux(sys_mags['y']-self._get_extinction('y', ext))
-		if 'u' in sys_filters:
+		if 'u' in self.sys_filters:
 			u = mag2flux(sys_mags['u']-self._get_extinction('u', ext))
 
 		#if coeff is None:
@@ -363,17 +363,14 @@ class sauron():
 		if ext is not None:
 			if self.R_coeff is None:
 				self.calculate_R()
-			gr_int = ((ps1_mags['g']-self._get_extinction('g', ext)) 
-					   - (ps1_mags['r']-self._get_extinction('r', ext)) )
+			gr_int = ((sys_mags['g']-self._get_extinction('g', ext)) 
+					   - (sys_mags['r']-self._get_extinction('r', ext)) )
 			comp += self.R_vector(x=gr_int)*ext
 
 		if mags is None:
 			self.comp = comp
 		else:
 			return comp
-
-
-
 
 
 	def comp_minimizer(self,coeff):
@@ -403,7 +400,6 @@ class sauron():
 					((self.sys_mags['g'] - self.sys_mags['i']) < self.gr_lims[1]))
 		else:
 			ind = np.isfinite(self.sys_mags['g'])
-
 		self.diff = self.mags[ind] - self.comp[ind]
 		if self.mask is None:
 			res = np.nansum(abs(self.diff))
@@ -466,11 +462,13 @@ class sauron():
 		try:
 			c0 = np.append(self.sys_overlap,0)
 			c0[c0<0.01] = 0
+			# bandaid solution 
+			if self.system == 'skymapper':
+				c0 = np.append(c0,0)
 		except:
 			c0 = self._make_c0()
 
 		bds = self._make_bds()
-
 		res = minimize(self.comp_minimizer,c0,bounds=bds)
 		self.mask = ~sigma_clip(self.diff,sigma=3).mask
 		res = minimize(self.comp_minimizer,res.x,bounds=bds)
@@ -621,13 +619,13 @@ class sauron():
 		if self.system == 'ps1':
 			return ['g','r','k','m','sienna']
 		elif self.system == 'skymapper':
-			return ['cyan','g','r','k','m']
+			return ['g','r','k','m']
 
 	def _set_filts(self):
 		if self.system == 'ps1':
 			return 'grizy'
 		elif self.system == 'skymapper':
-			return 'ugriz'
+			return 'griz'
 
 	def coverage_plot(self):
 		"""
@@ -663,7 +661,7 @@ class sauron():
 			plt.text(8200,1.03,'PS1 $z$',color='m',fontsize=12)
 			plt.text(9200,1.03,'PS1 $y$',color='sienna',fontsize=12)
 		elif self.system == 'skymapper':
-			plt.text(3200,1.03,'SM $u$',color='cyan',fontsize=12)
+			#plt.text(3200,1.03,'SM $u$',color='cyan',fontsize=12)
 			plt.text(4500,1.03,'SM $g$',color='g',fontsize=12)
 			plt.text(5800,1.03,'SM $r$',color='r',fontsize=12)
 			plt.text(7150,1.03,'SM $i$',color='k',fontsize=12)
@@ -835,7 +833,7 @@ class sauron():
 		ext = (m_e - self.mags) / ebv
 
 
-		gr = self.ps1_mags['g'] - self.ps1_mags['r']
+		gr = self.sys_mags['g'] - self.sys_mags['r']
 		if self.gr_lims is None:
 			ind = (gr < 1) #& (gr > -.2)
 		else:
