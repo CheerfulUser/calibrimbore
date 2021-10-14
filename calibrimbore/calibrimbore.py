@@ -88,7 +88,7 @@ class sauron():
 		If `True` the a color dependent magnitude cubic polynomial
 		correction will be calculated for the composite magnitude.
 	"""
-	def __init__(self,band=None,name=None,ps1_filters='auto',
+	def __init__(self,band=None,name=None,system='ps1',filters='auto',
 				 gr_lims=None,gi_lims=None,system='AB',
 				 plot=False,make_comp=True, cubic_corr=True,
 				 calc_R=True,obstable=None, savename=None):
@@ -99,14 +99,19 @@ class sauron():
 		self.name = name
 		self.zp = None
 		self.system = system.lower()
+		self._check_system()
 		self.savename = savename
 		self.load_band()
-		self.ps1_overlap = None
-		if ps1_filters.lower() == 'auto':
-			self.ps1_filters = ''
+		self.system = system
+		self._sys_bands = self._load_sys_bands()
+		self.overlap = None
+		if filters.lower() == 'auto':
+			# Identify relevant system filters to use 
+			self.sys_filters = ''
 			self.filter_overlap()
+			print('Making a composite filter of '+ self.band + ' ' + self.system)
 		else:
-			self.ps1_filters = ps1_filters
+			self.filters = filters
 		
 		self.gr_lims = gr_lims
 		self.gi_lims = gi_lims
@@ -115,8 +120,8 @@ class sauron():
 
 		# Defined:
 		if self.system == 'ab':
-			self.ps1_mags = np.load(package_directory+'data/calspec_ab_mags_ps1.npy',
-									allow_pickle=True).item()		
+			self.sys_mags = self._load_sys_mags()
+
 		# actually makes no sense to do this here since all PS1 is in AB
 		#elif self.system == 'vega':
 		#	self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
@@ -130,16 +135,11 @@ class sauron():
 		self.R = None
 		self.spline = None
 		self.cubic_coeff = None
-		self.gr = self.ps1_mags['g'] - self.ps1_mags['r']
+		self.gr = self.sys_mags['g'] - self.sys_mags['r']
 		if self.gr_lims is not None:
 			ind = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
 			self.gr = self.gr[ind]
 
-
-		# Identify relevant PS1 filters to use 
-		if self.ps1_filters.lower() == 'auto':
-			self.filter_overlap()
-			print('Making a composite filter with PS1 ' + self.band)
 
 		# Make the composite filter function
 		if make_comp:
@@ -166,7 +166,23 @@ class sauron():
 				# calculate the extinction vector coefficients
 				self.calculate_R(plot=plot)
 			
+	def _load_sys_mags(self):
+		system = self.system
+		mags = np.load(package_directory+'data/calspec_ab_mags_' + system + '.npy',
+									allow_pickle=True).item()
+		return mags	
 
+	def _load_sys_bands(self):
+		if self.system == 'ps1':
+			self._sys_bands = ps1_bands
+		elif self.system == 'skymapper':
+			self._sys_bands = skymapper_bands
+
+	def _check_system(self):
+		allowed = np.array(['ps1','skymapper'])
+		if ~(self.system == allowed).amy():
+			m = self.system + ' is not supported. Select from: \nps1 \nskymapper'
+			raise ValueError(m)
 
 	def load_band(self):
 		"""
@@ -202,26 +218,27 @@ class sauron():
 		self.ps1_filters : `str`
 			A single string containing all relevant filters in increasing wavelength size.
 
-		self.ps1_overlap : numpy array
+		self.sys_overlap : numpy array
 			Percentage overlap for each of the bands
 		"""
 		bands = ''
 		percentage = []
-		pbs = list(ps1_bands.keys()) 
+		bands = self._sys_bands
+		pbs = list(bands.keys()) 
 
 		for pb in pbs:
-			ps1 = ps1_bands[pb]
-			func = interp1d(ps1.wave,ps1.throughput,bounds_error=False,fill_value=0)
+			band = bands[pb]
+			func = interp1d(band.wave,band.throughput,bounds_error=False,fill_value=0)
 			overlap = (np.trapz(func(self.band.wave) * self.band.throughput, x = self.band.wave) / 
 					   np.trapz(self.band.throughput, x = self.band.wave))
 			percentage += [overlap]
 			if overlap > 0.01:
 				bands += pb
 		if bands == '':
-			raise ValueError(('No direct overlap with the PS1 filters! ' + 
-							  'A filter combination must be given in the ps1_filters variable.'))
-		self.ps1_filters = bands
-		self.ps1_overlap = np.array(percentage)
+			raise ValueError(('No direct overlap with the ' + self.system + ' filters! ' + 
+							  'A filter combination must be given in the sys_filters variable.'))
+		self.sys_filters = bands
+		self.sys_overlap = np.array(percentage)
 
 
 	def syn_calspec_mags(self,ebv=0,Rv=3.1):
@@ -283,10 +300,18 @@ class sauron():
 		keys = list(obstable.keys())
 		for key in keys:
 			if 'ps1' in key.lower():
-				self.ps1_mags[key[0]] = obstable[key]
+				self.sys_mags[key[0]] = obstable[key]
 			else:
 				self.mags = obstable[key]
 
+	def _get_extinction(self,band,ext):
+		if ext is not None:
+			gr = self.sys_mags['g'] - self.sys_mags['r']
+			Rg, Rg_e = R_val(band,self.system,gr=gr)
+			A = Rg*ext
+		else:
+			A = 0
+		return A
 
 
 	def make_composite(self,coeff=None,mags=None,ext=None):
@@ -309,36 +334,24 @@ class sauron():
 			Composite magnitude in the input bandpass.
 
 		"""
+		system = self.system
 		if mags is None:
-			ps1_mags = self.ps1_mags
+			sys_mags = self.sys_mags
 		else:
-			ps1_mags = mags
-		if ext is not None:
-			gr = ps1_mags['g'] - ps1_mags['r']
-			Rg, Rg_e = R_val('g',gr=gr)
-			extg = Rg*ext
-			Rr, Rr_e = R_val('r',gr=gr)
-			extr = Rr*ext
-			Ri, Ri_e = R_val('i',gr=gr)
-			exti = Ri*ext
-			Rz, Rz_e = R_val('z',gr=gr)
-			extz = Rz*ext
-			Ry, Ry_e = R_val('y',gr=gr)
-			exty = Ry*ext
-		else:
-			extg = 0; extr = 0; exti = 0
-			extz = 0; exty = 0
+			sys_mags = mags
 
 
-		r = 0; z = 0; y= 0	
-		g = mag2flux(ps1_mags['g']-extg)
-		i = mag2flux(ps1_mags['i']-exti)
-		if 'r' in self.ps1_filters:
-			r = mag2flux(ps1_mags['r']-extr)
-		if 'z' in self.ps1_filters:
-			z = mag2flux(ps1_mags['z']-extz)
-		if 'y' in self.ps1_filters:
-			y = mag2flux(ps1_mags['y']-exty)
+		r = 0; z = 0; y= 0; u = 0
+		g = mag2flux(sys_mags['g']-self._get_extinction('g', ext))
+		i = mag2flux(sys_mags['i']-self._get_extinction('i', ext))
+		if 'r' in self.sys_filters:
+			r = mag2flux(sys_mags['r']-self._get_extinction('r', ext))
+		if 'z' in self.sys_filters:
+			z = mag2flux(sys_mags['z']-self._get_extinction('z', ext))
+		if 'y' in self.sys_filters:
+			y = mag2flux(sys_mags['y']-self._get_extinction('y', ext))
+		if 'u' in sys_filters:
+			u = mag2flux(sys_mags['u']-self._get_extinction('u', ext))
 
 		#if coeff is None:
 		coeff = self.coeff
@@ -350,13 +363,18 @@ class sauron():
 		if ext is not None:
 			if self.R_coeff is None:
 				self.calculate_R()
-			gr_int = (ps1_mags['g']-extg)-(ps1_mags['r']-extr)
+			gr_int = ((ps1_mags['g']-self._get_extinction('g', ext)) 
+					   - (ps1_mags['r']-self._get_extinction('r', ext)) )
 			comp += self.R_vector(x=gr_int)*ext
 
 		if mags is None:
 			self.comp = comp
 		else:
 			return comp
+
+
+
+
 
 	def comp_minimizer(self,coeff):
 		"""
@@ -378,13 +396,13 @@ class sauron():
 		self.coeff = coeff
 		self.make_composite()
 		if self.gr_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['r']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['r']) < self.gr_lims[1]))
+			ind = (((self.sys_mags['g'] - self.sys_mags['r']) > self.gr_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['r']) < self.gr_lims[1]))
 		elif self.gi_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['i']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['i']) < self.gr_lims[1]))
+			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gr_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['i']) < self.gr_lims[1]))
 		else:
-			ind = np.isfinite(self.ps1_mags['g'])
+			ind = np.isfinite(self.sys_mags['g'])
 
 		self.diff = self.mags[ind] - self.comp[ind]
 		if self.mask is None:
@@ -399,15 +417,15 @@ class sauron():
 		(its pretty lazy!).
 		"""
 		c0 = np.array([0,0,0,0,0,0.01])
-		if 'g' in self.ps1_filters:
+		if 'g' in self.sys_filters:
 			c0[0] += 0.1
-		if 'r' in self.ps1_filters:
+		if 'r' in self.sys_filters:
 			c0[1] += 0.1
-		if 'i' in self.ps1_filters:
+		if 'i' in self.sys_filters:
 			c0[2] += 0.1
-		if 'z' in self.ps1_filters:
+		if 'z' in self.sys_filters:
 			c0[3] += 0.1
-		if 'y' in self.ps1_filters:
+		if 'y' in self.sys_filters:
 			c0[4] += 0.1
 		return c0
 
@@ -432,7 +450,7 @@ class sauron():
 		bds = []
 		filts = ['g','r','i','z','y']
 		for f in filts:
-			if f in self.ps1_filters:
+			if f in self.sys_filters:
 				bds += [(0,2)]
 			else:
 				bds += [(0,1e-10)]
@@ -446,7 +464,7 @@ class sauron():
 		flux coefficients.
 		"""
 		try:
-			c0 = np.append(self.ps1_overlap,0)
+			c0 = np.append(self.sys_overlap,0)
 			c0[c0<0.01] = 0
 		except:
 			c0 = self._make_c0()
@@ -593,6 +611,24 @@ class sauron():
 		eqn += str(np.round(coeff[3],4)) + '(g-r)^3'
 		return eqn
 
+	def _set_plot_label(self):
+		if self.system == 'ps1':
+			return 'PS1 '
+		elif self.system == 'skymapper':
+			return 'SkyMapper '
+
+	def _set_color_palette(self):
+		if self.system == 'ps1':
+			return ['g','r','k','m','sienna']
+		elif self.system == 'skymapper':
+			return ['cyan','g','r','k','m']
+
+	def _set_filts(self):
+		if self.system == 'ps1':
+			return 'grizy'
+		elif self.system == 'skymapper':
+			return 'ugriz'
+
 	def coverage_plot(self):
 		"""
 		Makes a plot showing all PS1 filters and the fitting filter.
@@ -604,26 +640,34 @@ class sauron():
 		plt.fill_between(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),
 						 color='k',alpha=0.05)
 		plt.plot(self.band.wave,self.band.throughput/np.nanmax(self.band.throughput),
-				 color='grey',label='$TESS$')
-		colors = ['g','r','k','m','sienna']	
-		filts = 'grizy'
+				 color='grey',label='Input filter')
+		colors = self._set_color_palette()
+		filts = self._set_filts()
+		lab = self._set_plot_label()
 		k = 0
 		for f in filts:
-			if f in self.ps1_filters:
-				plt.plot(ps1_bands[f].wave,
-						 ps1_bands[f].throughput/np.nanmax(ps1_bands[f].throughput),
-						 '-',color=colors[k],label='PS1 '+f)
+			if f in self.sys_filters:
+				plt.plot(self._sys_bands[f].wave,
+						 self._sys_bands[f].throughput/np.nanmax(self._sys_bands[f].throughput),
+						 '-',color=colors[k],label=lab + f)
 			else:
-				plt.plot(ps1_bands[f].wave,
-						 ps1_bands[f].throughput/np.nanmax(ps1_bands[f].throughput),
-					 ':',color=colors[k],label='PS1 '+f)
+				plt.plot(self._sys_bands[f].wave,
+						 self._sys_bands[f].throughput/np.nanmax(self._sys_bands[f].throughput),
+					 	 ':',color=colors[k],label=lab + f)
 			k += 1
-		
-		plt.text(4500,1.03,'PS1 $g$',color='g',fontsize=12)
-		plt.text(5800,1.03,'PS1 $r$',color='r',fontsize=12)
-		plt.text(7150,1.03,'PS1 $i$',color='k',fontsize=12)
-		plt.text(8200,1.03,'PS1 $z$',color='m',fontsize=12)
-		plt.text(9200,1.03,'PS1 $y$',color='sienna',fontsize=12)
+
+		if self.system == 'ps1':
+			plt.text(4500,1.03,'PS1 $g$',color='g',fontsize=12)
+			plt.text(5800,1.03,'PS1 $r$',color='r',fontsize=12)
+			plt.text(7150,1.03,'PS1 $i$',color='k',fontsize=12)
+			plt.text(8200,1.03,'PS1 $z$',color='m',fontsize=12)
+			plt.text(9200,1.03,'PS1 $y$',color='sienna',fontsize=12)
+		elif self.system == 'skymapper':
+			plt.text(3200,1.03,'SM $u$',color='cyan',fontsize=12)
+			plt.text(4500,1.03,'SM $g$',color='g',fontsize=12)
+			plt.text(5800,1.03,'SM $r$',color='r',fontsize=12)
+			plt.text(7150,1.03,'SM $i$',color='k',fontsize=12)
+			plt.text(9000,1.03,'SM $z$',color='m',fontsize=12)
 
 		plt.ylim(0,1.15)
 
@@ -632,7 +676,7 @@ class sauron():
 		plt.tight_layout()
 
 		if self.savename is not None:
-			plt.savefig(self.savename + '_coverage.pdf')
+			plt.savefig(self.savename + '_' + self.system +'_coverage.pdf')
 
 
 	def diagnostic_plots(self,spline=True):
@@ -643,17 +687,17 @@ class sauron():
 		gi = False
 		# apply colour limits
 		if self.gr_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['r']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['r']) < self.gr_lims[1]))
-			x = (self.ps1_mags['g'] - self.ps1_mags['r'])[ind]
+			ind = (((self.sys_mags['g'] - self.sys_mags['r']) > self.gr_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['r']) < self.gr_lims[1]))
+			x = (self.sys_mags['g'] - self.sys_mags['r'])[ind]
 			gi = False
 		elif self.gi_lims is not None:
-			ind = (((self.ps1_mags['g'] - self.ps1_mags['i']) > self.gr_lims[0]) & 
-					((self.ps1_mags['g'] - self.ps1_mags['i']) < self.gr_lims[1]))
-			x = (self.ps1_mags['g'] - self.ps1_mags['i'])[ind]
+			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gr_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['i']) < self.gr_lims[1]))
+			x = (self.sys_mags['g'] - self.sys_mags['i'])[ind]
 			gi = True
 		else:
-			x = (self.ps1_mags['g'] - self.ps1_mags['r'])
+			x = (self.sys_mags['g'] - self.sys_mags['r'])
 			ind = np.isfinite(x)
 
 		self.make_composite()
@@ -750,7 +794,7 @@ class sauron():
 		plt.tight_layout()
 
 		if self.savename is not None:
-			plt.savefig(self.savename+'_residuals.pdf')
+			plt.savefig(self.savename+ '_' + self.system +'_residuals.pdf')
 
 	def R_vector(self,x=None): 
 		"""
@@ -845,7 +889,10 @@ class sauron():
 
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
-			cal_stars = get_ps1_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
+			if self.system == 'ps1':
+				cal_stars = get_ps1_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
+			elif self.system == 'skymapper':
+				cal_stars = get_skymapper_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
 			
 			e, dat = Tonry_reduce(cal_stars)
 
@@ -880,11 +927,14 @@ class sauron():
 		comp : `array`
 			Composite magnitudes created for the targets of interest.
 		"""
-		print(cas_id)
 		if (ra is not None) & (dec is not None):
 			if catalog.lower() == 'vizier':
-				mags = get_ps1(ra, dec, size)
-			elif catalog.lower == 'casjobs':
+				if self.system == 'ps1':
+					mags = get_ps1(ra, dec, size)
+				elif self.system == 'skymapper':
+					mags = get_skymapper(ra, dec, size)
+
+			elif (catalog.lower == 'casjobs') & (self.system == ps1):
 				if (cas_id is not None) & (cas_pwd is not None):
 					print('Using CASJobs to access PS1 DR2')
 					mags = ps1_casjobs(ra, dec, size)

@@ -47,6 +47,20 @@ ps1_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'z': S.ArrayBandpass(z[:,0],z[:,1]),
              'y': S.ArrayBandpass(y[:,0],y[:,1])}
 
+g = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_g.dat')
+r = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_r.dat')
+i = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_i.dat')
+z = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_z.dat')
+v = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_v.dat')
+u = np.loadtxt(package_directory + 'data/skymappaer_bands/sm_u.dat')
+
+sm_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
+             'r': S.ArrayBandpass(r[:,0],r[:,1]),
+             'i': S.ArrayBandpass(i[:,0],i[:,1]),  
+             'z': S.ArrayBandpass(z[:,0],z[:,1]),
+             'v': S.ArrayBandpass(v[:,0],v[:,1]),
+             'u': S.ArrayBandpass(u[:,0],u[:,1])}
+
 def get_pb_zpt(pb, reference='AB', model_mag=None):
     """
     Determines a passband zeropoint for synthetic photometry, given a reference
@@ -224,6 +238,69 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     final = final.drop(['temp'], axis=1)
     return final
 
+def get_skymapper_region(ra,dec,size=0.2*60**2):
+    """
+    Get PS1 observations for a region.
+    
+    ------
+    Inputs 
+    ------
+    ra : `float`
+        RA of target
+    dec : `float`
+        Dec of target
+    size : `float`
+        Search radius in arcsec, 0.2 deg is a good default 
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant PS1 observations for each object entered 
+        with the ra and dec lists.
+    """
+    if (type(ra) == float) | (type(ra) == np.float64):
+        ra = [ra]
+    if (type(dec) == float) | (type(dec) == np.float64):
+        dec = [dec]
+    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+    
+    Vizier.ROW_LIMIT = -1
+    
+    catalog = "II/358/smss"
+    print('Querying regions with Vizier')
+    result = Vizier.query_region(coords, catalog=[catalog],
+                                 radius=Angle(size, "arcsec"))
+    no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or Vizier is unavailable')
+    if result is None:
+        raise no_targets_found_message
+    elif len(result) == 0:
+        raise no_targets_found_message
+    result = result[catalog].to_pandas()
+    r = deepcopy(result)
+    final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
+    final['ra'] = np.nan
+    final['dec'] = np.nan
+    final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
+    final['z'] = np.nan; final['u'] = np.nan
+    final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
+    final['z_e'] = np.nan; final['u_e'] = np.nan
+
+    final['g'] = r['gPSF'].values; final['r'] = r['rPSF'].values; final['i'] = r['iPSF'].values
+    final['z'] = r['zPSF'].values; final['u'] = r['uPSF'].values
+
+    final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
+    final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 
+    final['y_e'] = r['e_ymag'].values
+
+    final['ra'] = r['RAICRS'].values; final['dec'] = r['DEICRS'].values
+    final = final.drop(['temp'], axis=1)
+
+    return final
+
+
+
 def query_casjob_ps1(ra,dec,size=3):
     import mastcasjobs
     query = """SELECT o.objID,
@@ -326,6 +403,82 @@ def get_ps1(ra,dec,size=3):
     final['ra'] = np.nan
     final['dec'] = np.nan
     final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
+    final['z'] = np.nan; final['u'] = np.nan
+    final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
+    final['z_e'] = np.nan; final['u_e'] = np.nan
+
+    final['g'].iloc[ind] = r['gPSF'].values[ind]; final['r'].iloc[ind] = r['rPSF'].values[ind] 
+    final['i'].iloc[ind] = r['iPSF'].values[ind]; final['z'].iloc[ind] = r['zPSF'].values[ind]
+    final['y'].iloc[ind] = r['yPSF'].values[ind]
+
+    final['g_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['r_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+    final['i_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['z_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+    final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+
+    final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
+    
+    return final 
+
+
+def get_skymapper(ra,dec,size=3):
+    """
+    Get PS1 observations for a list of coordinates.
+    
+    ------
+    Inputs 
+    ------
+    ra : `list`/`array`
+        RA of target
+    dec : `list`/`array`
+        Dec of target
+    size : `float`
+        Search radius in arcsec, 3 arcsec is a good default.
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant PS1 observations for each object entered 
+        with the ra and dec lists.
+    """
+    if (type(ra) == float) | (type(ra) == np.float64):
+        ra = [ra]
+    if (type(dec) == float) | (type(dec) == np.float64):
+        dec = [dec]
+    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+    
+    Vizier.ROW_LIMIT = -1
+    
+    catalog = "II/358/smss"
+    print('Querying regions with Vizier')
+    result = Vizier.query_region(coords, catalog=[catalog],
+                                 radius=Angle(size, "arcsec"))
+    no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or Vizier is unavailable')
+    if result is None:
+        raise no_targets_found_message
+    elif len(result) == 0:
+        raise no_targets_found_message
+    result = result[catalog].to_pandas()
+
+    targets = coords.to_pandas()
+
+    dist = np.zeros((len(targets),len(result)))
+
+    dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['RAJ2000'].values[np.newaxis,:])**2 +
+            (targets['_DEJ2000'].values[:,np.newaxis] - result['DEJ2000'].values[np.newaxis,:])**2)
+
+    min_ind = np.argmin(dist,axis=1)
+    ind = np.nanmin(dist,axis=1) <= size
+
+    min_ind2 = np.argmin(dist,axis=0)
+
+    r = deepcopy(result.iloc[min_ind])
+
+    final = deepcopy(targets)
+    final['ra'] = np.nan
+    final['dec'] = np.nan
+    final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
     final['z'] = np.nan; final['y'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
     final['z_e'] = np.nan; final['y_e'] = np.nan
@@ -337,6 +490,7 @@ def get_ps1(ra,dec,size=3):
     final['z_e'].iloc[ind] = r['e_zmag'].values[ind]; final['y_e'].iloc[ind] = r['e_ymag'].values[ind]
     final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
     return final 
+
 
 
 # Tools to use the Tonry 2012 PS1 color splines to fit extinction
