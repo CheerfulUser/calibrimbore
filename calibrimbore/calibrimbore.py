@@ -304,13 +304,19 @@ class sauron():
 			else:
 				self.mags = obstable[key]
 
-	def _get_extinction(self,band,ext):
+	def _get_extinction(self,band,ext,mags = None):
+		if mags is not None:
+			data = mags 
+		else:
+			data = self.sys_mags
+
 		if ext is not None:
-			gr = self.sys_mags['g'] - self.sys_mags['r']
+			gr = data['g'] - data['r']
 			Rg, Rg_e = R_val(band,self.system,gr=gr)
 			A = Rg*ext
 		else:
 			A = 0
+
 		return A
 
 
@@ -342,16 +348,16 @@ class sauron():
 
 
 		r = 0; z = 0; y= 0; u = 0
-		g = mag2flux(sys_mags['g']-self._get_extinction('g', ext))
-		i = mag2flux(sys_mags['i']-self._get_extinction('i', ext))
+		g = mag2flux(sys_mags['g']-self._get_extinction('g', ext, mags))
+		i = mag2flux(sys_mags['i']-self._get_extinction('i', ext, mags))
 		if 'r' in self.sys_filters:
-			r = mag2flux(sys_mags['r']-self._get_extinction('r', ext))
+			r = mag2flux(sys_mags['r']-self._get_extinction('r', ext, mags))
 		if 'z' in self.sys_filters:
-			z = mag2flux(sys_mags['z']-self._get_extinction('z', ext))
+			z = mag2flux(sys_mags['z']-self._get_extinction('z', ext, mags))
 		if 'y' in self.sys_filters:
-			y = mag2flux(sys_mags['y']-self._get_extinction('y', ext))
+			y = mag2flux(sys_mags['y']-self._get_extinction('y', ext, mags))
 		if 'u' in self.sys_filters:
-			u = mag2flux(sys_mags['u']-self._get_extinction('u', ext))
+			u = mag2flux(sys_mags['u']-self._get_extinction('u', ext, mags))
 
 		#if coeff is None:
 		coeff = self.coeff
@@ -363,8 +369,8 @@ class sauron():
 		if ext is not None:
 			if self.R_coeff is None:
 				self.calculate_R()
-			gr_int = ((sys_mags['g']-self._get_extinction('g', ext)) 
-					   - (sys_mags['r']-self._get_extinction('r', ext)) )
+			gr_int = ((sys_mags['g']-self._get_extinction('g', ext, mags))
+					   - (sys_mags['r']-self._get_extinction('r', ext, mags)) )
 			comp += self.R_vector(x=gr_int)*ext
 
 		if mags is None:
@@ -892,7 +898,7 @@ class sauron():
 			elif self.system == 'skymapper':
 				cal_stars = get_skymapper_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
 			
-			e, dat = Tonry_reduce(cal_stars)
+			e, dat = Tonry_reduce(cal_stars,system = self.system)
 
 			dist = np.sqrt((mags['ra'] - mags['ra'][i])**2 + (mags['dec'] - mags['dec'][i])**2)
 			ind = dist < .2*60**2
@@ -972,9 +978,8 @@ class sauron():
 		else:
 			ebv = np.zeros(len(mag2['g']))
 
-
 		comp = self.make_composite(mags = mag2,ext=ebv)
-		if correction:
+		if self.cubic_corr:
 			comp -= self.cubic_correction(x=gr)
 		
 		final = np.zeros(len(mags['g'])) * np.nan

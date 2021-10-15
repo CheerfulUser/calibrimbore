@@ -26,8 +26,10 @@ from .sigmacut import calcaverageclass
 
 from scipy.interpolate import UnivariateSpline
 
-cas_id = os.environ.get('CASJOBS_WSID')
-cas_pwd = os.environ.get('CASJOBS_PW')
+from .R_load import R_val
+
+#cas_id = os.environ.get('CASJOBS_WSID')
+#cas_pwd = os.environ.get('CASJOBS_PW')
 
 fig_width_pt = 240.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27               # Convert pt to inches
@@ -292,7 +294,7 @@ def get_skymapper_region(ra,dec,size=0.2*60**2):
 
     final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
     final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 
-    final['y_e'] = r['e_ymag'].values
+    final['u_e'] = final['g'].values * np.nan 
 
     final['ra'] = r['RAICRS'].values; final['dec'] = r['DEICRS'].values
     final = final.drop(['temp'], axis=1)
@@ -403,17 +405,15 @@ def get_ps1(ra,dec,size=3):
     final['ra'] = np.nan
     final['dec'] = np.nan
     final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
-    final['z'] = np.nan; final['u'] = np.nan
+    final['z'] = np.nan; final['y'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
-    final['z_e'] = np.nan; final['u_e'] = np.nan
+    final['z_e'] = np.nan; final['y_e'] = np.nan
 
-    final['g'].iloc[ind] = r['gPSF'].values[ind]; final['r'].iloc[ind] = r['rPSF'].values[ind] 
-    final['i'].iloc[ind] = r['iPSF'].values[ind]; final['z'].iloc[ind] = r['zPSF'].values[ind]
-    final['y'].iloc[ind] = r['yPSF'].values[ind]
+    final['g'].iloc[ind] = r['gmag'].values[ind]; final['r'].iloc[ind] = r['rmag'].values[ind]; final['i'].iloc[ind] = r['imag'].values[ind]
+    final['z'].iloc[ind] = r['zmag'].values[ind]; final['y'].iloc[ind] = r['ymag'].values[ind]
 
-    final['g_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['r_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
-    final['i_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['z_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
-    final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+    final['g_e'].iloc[ind] = r['e_gmag'].values[ind]; final['r_e'].iloc[ind] = r['e_rmag'].values[ind]; final['i_e'].iloc[ind] = r['e_imag'].values[ind]
+    final['z_e'].iloc[ind] = r['e_zmag'].values[ind]; final['y_e'].iloc[ind] = r['e_ymag'].values[ind]
 
     final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
 
@@ -450,7 +450,7 @@ def get_skymapper(ra,dec,size=3):
     Vizier.ROW_LIMIT = -1
     
     catalog = "II/358/smss"
-    print('Querying regions with Vizier')
+    #print('Querying regions with Vizier')
     result = Vizier.query_region(coords, catalog=[catalog],
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
@@ -465,8 +465,8 @@ def get_skymapper(ra,dec,size=3):
 
     dist = np.zeros((len(targets),len(result)))
 
-    dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['RAJ2000'].values[np.newaxis,:])**2 +
-            (targets['_DEJ2000'].values[:,np.newaxis] - result['DEJ2000'].values[np.newaxis,:])**2)
+    dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['RAICRS'].values[np.newaxis,:])**2 +
+            (targets['_DEJ2000'].values[:,np.newaxis] - result['DEICRS'].values[np.newaxis,:])**2)
 
     min_ind = np.argmin(dist,axis=1)
     ind = np.nanmin(dist,axis=1) <= size
@@ -476,30 +476,35 @@ def get_skymapper(ra,dec,size=3):
     r = deepcopy(result.iloc[min_ind])
 
     final = deepcopy(targets)
+    final = deepcopy(targets)
     final['ra'] = np.nan
     final['dec'] = np.nan
     final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
-    final['z'] = np.nan; final['y'] = np.nan
+    final['z'] = np.nan; final['u'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
-    final['z_e'] = np.nan; final['y_e'] = np.nan
+    final['z_e'] = np.nan; final['u_e'] = np.nan
 
-    final['g'].iloc[ind] = r['gmag'].values[ind]; final['r'].iloc[ind] = r['rmag'].values[ind]; final['i'].iloc[ind] = r['imag'].values[ind]
-    final['z'].iloc[ind] = r['zmag'].values[ind]; final['y'].iloc[ind] = r['ymag'].values[ind]
+    final['g'].iloc[ind] = r['gPSF'].values[ind]; final['r'].iloc[ind] = r['rPSF'].values[ind] 
+    final['i'].iloc[ind] = r['iPSF'].values[ind]; final['z'].iloc[ind] = r['zPSF'].values[ind]
+    final['u'].iloc[ind] = r['uPSF'].values[ind]
 
-    final['g_e'].iloc[ind] = r['e_gmag'].values[ind]; final['r_e'].iloc[ind] = r['e_rmag'].values[ind]; final['i_e'].iloc[ind] = r['e_imag'].values[ind]
-    final['z_e'].iloc[ind] = r['e_zmag'].values[ind]; final['y_e'].iloc[ind] = r['e_ymag'].values[ind]
-    final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
+    final['g_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['r_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+    final['i_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['z_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+    final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+
+    final['ra'].iloc[ind] = r['RAICRS'].values[ind]; final['dec'].iloc[ind] = r['DEICRS'].values[ind]
     return final 
 
 
 
 # Tools to use the Tonry 2012 PS1 color splines to fit extinction
 
-def Tonry_clip(Colours):
+def Tonry_clip(Colours,model):
     """
     Use the Tonry 2012 PS1 splines to sigma clip the observed data.
     """
-    tonry = np.loadtxt(package_directory + '/data/Tonry_splines.txt')
+    #tonry = np.loadtxt(os.path.join(dirname,'Tonry_splines.txt'))
+    tonry = model
     X = 'r-i'
     Y = 'g-r'
     x = Colours['obs r-i'][0,:]
@@ -520,11 +525,11 @@ def Tonry_clip(Colours):
     ind[ind] = ~sig
     return ind
 
-def Tonry_residual(Colours):
+def Tonry_residual(Colours,model):
     """
     Calculate the residuals of the observed data from the Tonry et al 2012 PS1 splines.
     """
-    tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
+    tonry = model
     X = 'r-i'
     Y = 'g-r'
     x = Colours['obs ' + X][0,:]
@@ -532,29 +537,34 @@ def Tonry_residual(Colours):
     y = Colours['obs ' + Y][0,:]
     my = tonry[:,1]
     # set up distance matrix
-    xx = x[:,np.newaxis] - mx[np.newaxis,:]
-    yy = y[:,np.newaxis] - my[np.newaxis,:]
+    xx = (x[:,np.newaxis] - mx[np.newaxis,:]) #.astype(float)
+    yy = (y[:,np.newaxis] - my[np.newaxis,:]) #.astype(float)
     # calculate distance
     dd = np.sqrt(xx**2 + yy**2)
     # return min values for the observation axis
     mingr = np.nanmin(dd,axis=1)
     return np.nansum(mingr) #+ np.nansum(miniz)
 
-def Tonry_fit(K,Data,Model,Compare):
+def Tonry_fit(K,Data,Model,Compare,system='ps1'):
     """
     Wrapper for the residuals function
     """
-    Colours = Make_colours(Data,Model,Compare,Extinction = K,Redden=False, Tonry = True)
-    res = Tonry_residual(Colours)
+    Colours = Make_colours(Data,Model,Compare,Extinction = K,Redden=False, 
+                            Tonry = True, system=system)
+    res = Tonry_residual(Colours,Model)
     return res
 
-def Tonry_reduce(Data,plot=False,savename=None):
+def Tonry_reduce(Data,plot=False,savename=None,system='ps1'):
     '''
     Uses the Tonry et al. 2012 PS1 splines to fit dust and find all outliers.
     '''
     data = deepcopy(Data)
-    tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
+    if system.lower() == 'ps1':
+        tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
+    else:
+        tonry = np.loadtxt(package_directory + 'data/SMspline.txt')
     compare = np.array([['r-i','g-r']])   
+    
     dat = data
     clips = []
     if len(dat) < 10:
@@ -565,17 +575,17 @@ def Tonry_reduce(Data,plot=False,savename=None):
         else:
             k0 = res.x
 
-        res = minimize(Tonry_fit,k0,args=(dat,tonry,compare),method='Nelder-Mead')
+        res = minimize(Tonry_fit,k0,args=(dat,tonry,compare,system),method='Nelder-Mead')
         
-        colours = Make_colours(dat,tonry,compare,Extinction = res.x, Tonry = True)
-        clip = Tonry_clip(colours)
+        colours = Make_colours(dat,tonry,compare,Extinction = res.x, Tonry = True,system=system)
+        clip = Tonry_clip(colours,tonry)
         clips += [clip]
         dat = dat.iloc[clip]
-        
+        #print('Pass ' + str(i+1) + ': '  + str(res.x[0]))
     clips[0][clips[0]] = clips[1]
     if plot:
-        orig = Make_colours(dat,tonry,compare,Extinction = 0, Tonry = True)
-        colours = Make_colours(dat,tonry,compare,Extinction = res.x, Tonry = True)
+        orig = Make_colours(dat,tonry,compare,Extinction = 0, Tonry = True,system=system)
+        colours = Make_colours(dat,tonry,compare,Extinction = res.x, Tonry = True,system=system)
         plt.figure(figsize=(1.5*fig_width,1*fig_width))
         #plt.title('Fit to Tonry et al. 2012 PS1 stellar locus')
         plt.plot(orig['obs r-i'].flatten(),orig['obs g-r'].flatten(),'C1+',alpha=0.5,label='Raw')
@@ -583,11 +593,11 @@ def Tonry_reduce(Data,plot=False,savename=None):
         plt.plot(colours['mod r-i'].flatten(),colours['mod g-r'].flatten(),'k-',label='Model')
         plt.xlabel('$r-i$',fontsize=15)
         plt.ylabel('$g-r$',fontsize=15)
-        plt.text(1, 0.25, '$E(B-V)={}$'.format(str(np.round(res.x[0],3))))
+        plt.text(0.75, 0.25, '$E(B-V)={}$'.format(str(np.round(res.x[0],3))))
         plt.legend()
         if savename is not None:
             plt.savefig(savename + '_SLR.pdf', bbox_inches = "tight")
-    
+    #clipped_data = data.iloc[clips[0]] 
     return res.x, dat
 
 
@@ -713,50 +723,20 @@ def Dist_tensor(X,Y,K,Colours,fitfilt='',Tensor=False,Plot = False):
     return residual + cut_points * 100
 
 
-def Make_colours(Data, Model, Compare, Extinction = 0, Redden = False,Tonry=False):
-    """
-    Make dictionaries of colour combinations used in stellar locus regression code.
-
-    ------
-    Inputs
-    ------
-    Data : pandas DataFrame
-        Contains the PS1 photometry in the required format
-    Model : pandas DataFrame
-        Contains the model PS1 photometry
-    Compare : `list`
-        List of tuples containing the colours to compare.
-    Extinction : `float`
-        Extinction in terms of `E(B-V)` to be applied to the photometry
-    Redden : `bool`
-        Switch to apply the extinction to the model data
-    Tonry : `bool`
-        Switch to comparing against the Tonry 2012 PS1 stellar locus.
-        This is used for determining the extinction
-
-    -------
-    Returns
-    -------
-    colours : `dict`
-        Dictionary containing the model and observed colours used for 
-        calibrating data through stellar locus regression.
-    """
-    R = {'g': 3.61562687, 'r':2.58602003, 'i':1.90959054, 
-         'z':1.50168735, 'y': 1.25340149}
+def Make_colours(Data, Model, Compare, Extinction = 0, Redden = False,Tonry=False,system='ps1'):
+    #R = {'g': 3.518, 'r':2.617, 'i':1.971, 'z':1.549, 'y': 1.286, 'k':2.431,'tess':1.809}#'z':1.549} # value from bayestar
+    R = {'g': 3.61562687, 'r':2.58602003, 'i':1.90959054, 'z':1.50168735, 
+         'y': 1.25340149, 'kep':2.68629375,'tess':1.809}
+    gr = (Data['g'] - Data['r']).values
     colours = {}
     for x,y in Compare:
         colours['obs ' + x] = np.array([Data[x.split('-')[0]].values - Data[x.split('-')[1]].values,
-                                        Data[x.split('-')[0]+'_e'].values - Data[x.split('-')[1]+'_e'].values])
+                                        Data[x.split('-')[0] + '_e'].values - Data[x.split('-')[1] + '_e'].values])
         colours['obs ' + y] = np.array([Data[y.split('-')[0]].values - Data[y.split('-')[1]].values,
-                                        Data[y.split('-')[0]+'_e'].values - Data[y.split('-')[1]+'_e'].values])
+                                        Data[y.split('-')[0] + '_e'].values - Data[y.split('-')[1] + '_e'].values])
         if Tonry:
             colours['mod ' + x] = Model[:,0]
             colours['mod ' + y] = Model[:,1]
-            # colour cut to remove weird top branch present in C2
-            if (y == 'g-r'):
-                ind = colours['obs g-r'][0,:] > 1.4
-                colours['obs g-r'][:,ind] = np.nan
-                colours['obs r-i'][:,ind] = np.nan
         else:
 
             xx = Model[x.split('-')[0]] - Model[x.split('-')[1]]
@@ -770,10 +750,10 @@ def Make_colours(Data, Model, Compare, Extinction = 0, Redden = False,Tonry=Fals
             colours['mod ' + y] = spl(c_range)
         
         if Redden:
-            colours['mod ' + x] += Extinction*((R[x.split('-')[0]] - R[x.split('-')[1]]))
-            colours['mod ' + y] += Extinction*(R[y.split('-')[0]] - R[y.split('-')[1]])
+            colours['mod ' + x] += Extinction*(R_val(x.split('-')[0],gr=gr,system=system)[0] - R_val(x.split('-')[1],gr=gr,system=system)[0])
+            colours['mod ' + y] += Extinction*(R_val(y.split('-')[0],gr=gr,system=system)[0] - R_val(y.split('-')[1],gr=gr,system=system)[0])
         else:
-            colours['obs ' + x] -= Extinction*((R[x.split('-')[0]] - R[x.split('-')[1]]))
-            colours['obs ' + y] -= Extinction*(R[y.split('-')[0]] - R[y.split('-')[1]])
+            colours['obs ' + x] -= Extinction*(R_val(x.split('-')[0],gr=gr,system=system)[0] - R_val(x.split('-')[1],gr=gr,system=system)[0])
+            colours['obs ' + y] -= Extinction*(R_val(y.split('-')[0],gr=gr,system=system)[0] - R_val(y.split('-')[1],gr=gr,system=system)[0])
     return colours 
 
