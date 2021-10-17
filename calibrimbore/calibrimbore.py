@@ -111,7 +111,7 @@ class sauron():
 			self.filter_overlap()
 			print('Making a composite filter of input band and ' + self.system)
 		else:
-			self.filters = filters
+			self.sys_filters = filters
 		
 		self.gr_lims = gr_lims
 		self.gi_lims = gi_lims
@@ -894,13 +894,14 @@ class sauron():
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
 			if self.system == 'ps1':
-				cal_stars = get_ps1_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
+				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			elif self.system == 'skymapper':
-				cal_stars = get_skymapper_region(mags['ra'][i], mags['dec'][i],size=.2*60**2)
+				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			
 			e, dat = Tonry_reduce(cal_stars,system = self.system)
 
-			dist = np.sqrt((mags['ra'] - mags['ra'][i])**2 + (mags['dec'] - mags['dec'][i])**2)
+			dist = np.sqrt((mags['ra'].values - mags['ra'].iloc[i])**2 + 
+							(mags['dec'].values - mags['dec'].iloc[i])**2)
 			ind = dist < .2*60**2
 			ebv[ind] = e
 		return ebv
