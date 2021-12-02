@@ -91,81 +91,133 @@ class sauron():
 	def __init__(self,band=None,name=None,system='ps1',filters='auto',
 				 gr_lims=None,gi_lims=None,mag_system='AB',
 				 plot=False,make_comp=True, cubic_corr=True,
-				 calc_R=True,obstable=None, savename=None):
+				 calc_R=True,obstable=None, savename=None,
+				 load_state=None):
 		"""
 		Setup the class.
 		"""
-		self.band = band
-		self.name = name
-		self.zp = None
-		self.mag_system = mag_system.lower()
-		self.system = system.lower()
-		self._check_system()
-		self.savename = savename
-		self._load_band()
-		self._load_sys_bands()
-		self.overlap = None
-		if filters.lower() == 'auto':
-			# Identify relevant system filters to use 
-			self.sys_filters = ''
-			self.filter_overlap()
-			print('Making a composite filter of input band and ' + self.system)
-		else:
-			self.sys_filters = filters
-		
-		self.gr_lims = gr_lims
-		self.gi_lims = gi_lims
-		self.cubic_corr = cubic_corr
-
-
-		# Defined:
-		if self.mag_system == 'ab':
-			self.sys_mags = self._load_sys_mags()
-
-		# actually makes no sense to do this here since all PS1 is in AB
-		#elif self.system == 'vega':
-		#	self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
-		#							allow_pickle=True).item()		
-
-		# Calculated
-		self.mags = None
-		self.coeff = None
-		self.diff = None
-		self.mask = None
-		self.R = None
-		self.spline = None
-		self.cubic_coeff = None
-		self.gr = self.sys_mags['g'] - self.sys_mags['r']
-		if self.gr_lims is not None:
-			ind = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
-			self.gr = self.gr[ind]
-
-
-		# Make the composite filter function
-		if make_comp:
-			if plot:
-				self.coverage_plot()
-			if obstable is None:
-				# calculate the expected Calspec mags in the band
-				self.syn_calspec_mags()
+		if load_state is None:
+			self.band = band
+			self.name = name
+			self.zp = None
+			self.mag_system = mag_system.lower()
+			self.system = system.lower()
+			self._check_system()
+			self.savename = savename
+			self._load_band()
+			self._load_sys_bands()
+			self.overlap = None
+			if filters.lower() == 'auto':
+				# Identify relevant system filters to use 
+				self.sys_filters = ''
+				self.filter_overlap()
+				print('Making a composite filter of input band and ' + self.system)
 			else:
-				self.assign_mags(obstable)
-			# fit the composite using the expected mags
-			self.fit_comp()
-			# print the composite function in a nice way
-			self.print_comp()
-			if cubic_corr:
-				# calculate a cubic polynomial to correct color
-				self.fit_cubic_correction()
-				# print the cubic corrector function in a nice way
-				self.print_cubic_correction()
-			if plot:
-				# make useful plot 
-				self.diagnostic_plots()
-			if calc_R:
-				# calculate the extinction vector coefficients
-				self.calculate_R(plot=plot)
+				self.sys_filters = filters
 			
+			self.gr_lims = gr_lims
+			self.gi_lims = gi_lims
+			self.cubic_corr = cubic_corr
+
+
+			# Defined:
+			if self.mag_system == 'ab':
+				self.sys_mags = self._load_sys_mags()
+
+			# actually makes no sense to do this here since all PS1 is in AB
+			#elif self.system == 'vega':
+			#	self.ps1_mags = np.load(package_directory+'data/calspec_vega_mags_ps1.npy',
+			#							allow_pickle=True).item()		
+
+			# Calculated
+			self.mags = None
+			self.coeff = None
+			self.diff = None
+			self.mask = None
+			self.R = None
+			self.spline = None
+			self.cubic_coeff = None
+			self.gr = self.sys_mags['g'] - self.sys_mags['r']
+			if self.gr_lims is not None:
+				ind = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
+				self.gr = self.gr[ind]
+
+
+			# Make the composite filter function
+			if make_comp:
+				if plot:
+					self.coverage_plot()
+				if obstable is None:
+					# calculate the expected Calspec mags in the band
+					self.syn_calspec_mags()
+				else:
+					self.assign_mags(obstable)
+				# fit the composite using the expected mags
+				self.fit_comp()
+				# print the composite function in a nice way
+				self.print_comp()
+				if cubic_corr:
+					# calculate a cubic polynomial to correct color
+					self.fit_cubic_correction()
+					# print the cubic corrector function in a nice way
+					self.print_cubic_correction()
+				if plot:
+					# make useful plot 
+					self.diagnostic_plots()
+				if calc_R:
+					# calculate the extinction vector coefficients
+					self.calculate_R(plot=plot)
+		else:
+			self._read_load_state(load_state)
+	
+
+	def _read_load_state(self,file):
+		"""
+		Read a saved calibrimbore state for a previously calculated filter 
+
+		------
+		Inputs
+		------
+		file : str
+			path to saved state file
+
+		"""
+		state = np.load(file,allow_pickle=True).item()
+		self.band = state['band']
+		self.coeff = state['coeff'] 
+		self.system = state['system'] 
+		self.R_coeff = state['R_coeff'] 
+		self.gi_lims = state['gi_lims'] 
+		self.gr_lims = state['gr_lims'] 
+		self.cubic_corr = state['cubic_corr'] 
+		self.mag_system = state['mag_system'] 
+		self.cubic_coeff = state['cubic_coeff'] 
+
+
+	def save_state(self,filename):
+		"""
+		Saves the current configuration of Sauron
+
+		------
+		Inputs
+		------
+		filename : str
+			full path of the saved state file
+		"""
+		state = {}
+		state['band'] = self.band
+		state['coeff'] = self.coeff
+		state['system'] = self.system
+		state['R_coeff'] = self.R_coeff
+		state['gi_lims'] = self.gi_lims
+		state['gr_lims'] = self.gr_lims
+		state['cubic_corr'] = self.cubic_corr
+		state['mag_system'] = self.mag_system
+		state['cubic_coeff'] = self.cubic_coeff
+
+		np.save(filename + ".npy", state)
+
+
 	def _load_sys_mags(self):
 		system = self.system
 		mags = np.load(package_directory+'data/calspec_ab_mags_' + system + '.npy',
