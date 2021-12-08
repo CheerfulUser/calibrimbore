@@ -44,6 +44,17 @@ comp.save_transform(name='test_filter',save_fmt='ascii')
 ```
 either ascii or csv can be selected for `save_fmt`.
 
+An instance of calibrimbore can be saved with:
+```python
+comp.save_state('filename')
+```
+this will save out the current configuration of calibrimbore to a dictionary stored in a .npy format. The saved state can then be read in when initialising sauron as:
+```python
+comp = sauron(load_state='path_to_file')
+```
+
+
+
 If you want to calibrate the chosen photometric system you can calculate the composite magnitude for a list 
 of sources with 
 ```python
@@ -53,4 +64,4 @@ where ra and dec are coordinates in degrees of the sources you wish to use for c
 these sources via Vizier and calculate their composite magnitudes. We also account for extinction by calculating the expected extinction for 
 stars in a given field using Stellar Locus Regression with the PS1 stellar sources within 0.2 deg of the source.
 
-For more information contact me at: rridden@stsci.edu
+For more information contact me at: ryan.ridden@canterbury.ac.nz

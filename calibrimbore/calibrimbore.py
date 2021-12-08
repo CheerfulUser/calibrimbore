@@ -191,6 +191,7 @@ class sauron():
 		self.gr_lims = state['gr_lims'] 
 		self.cubic_corr = state['cubic_corr'] 
 		self.mag_system = state['mag_system'] 
+		self.sys_filters = state['sys_filters']
 		self.cubic_coeff = state['cubic_coeff'] 
 
 
@@ -214,6 +215,7 @@ class sauron():
 		state['cubic_corr'] = self.cubic_corr
 		state['mag_system'] = self.mag_system
 		state['cubic_coeff'] = self.cubic_coeff
+		state['sys_filters'] = self.sys_filters
 
 		np.save(filename + ".npy", state)
 
@@ -1008,21 +1010,16 @@ class sauron():
 		
 		if gr_lims is not None:
 			ind = (gr > gr_lims[0]) & (gr < gr_lims[1])
-			keys = list(mags.keys())
-			mag2={}
-			for key in keys:
-				mag2[key] = mags[key][ind]
-			gr = gr[ind]
 		elif self.gr_lims is not None:
 			ind = (gr > self.gr_lims[0]) & (gr < self.gr_lims[1])
-			keys = list(mags.keys())
-			mag2={}
-			for key in keys:
-				mag2[key] = mags[key][ind]
-			gr = gr[ind]
-
 		else:
 			ind = np.isfinite(gr)
+
+		keys = list(mags.keys())
+		mag2={}
+		for key in keys:
+			mag2[key] = mags[key][ind]
+		gr = gr[ind]
 		
 		if extinction:
 			if self.R_coeff is None:
@@ -1034,7 +1031,6 @@ class sauron():
 		comp = self.make_composite(mags = mag2,ext=ebv)
 		if self.cubic_corr:
 			comp -= self.cubic_correction(x=gr)
-		
 		final = np.zeros(len(mags['g'])) * np.nan
 		final[ind] = comp
 		return final
