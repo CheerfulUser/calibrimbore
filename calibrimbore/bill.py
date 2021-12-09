@@ -212,7 +212,7 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     Vizier.ROW_LIMIT = -1
     
     catalog = "II/349/ps1"
-    print('Querying regions with Vizier')
+    #print('Querying regions with Vizier')
     result = Vizier.query_region(coords, catalog=[catalog],
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
@@ -231,8 +231,11 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
     final['z_e'] = np.nan; final['y_e'] = np.nan
 
-    final['g'] = r['gmag'].values; final['r'] = r['rmag'].values; final['i'] = r['imag'].values
-    final['z'] = r['zmag'].values; final['y'] = r['ymag'].values
+    # assign magnitudes to the table and apply the DA WD calibration to PS1 DR1
+    # from Narayan 2019
+    final['g'] = r['gmag'].values - 12e-3; final['r'] = r['rmag'].values - 4e-3
+    final['i'] = r['imag'].values - 13e-3; final['z'] = r['zmag'].values - 7e-3
+    final['y'] = r['ymag'].values # no correction for y
 
     final['g_e'] = r['e_gmag'].values; final['r_e'] = r['e_rmag'].values; final['i_e'] = r['e_imag'].values
     final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
