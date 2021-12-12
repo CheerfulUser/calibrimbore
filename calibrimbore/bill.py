@@ -62,6 +62,20 @@ skymapper_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'z': S.ArrayBandpass(z[:,0],z[:,1])}
              #'v': S.ArrayBandpass(v[:,0],v[:,1]),
              #'u': S.ArrayBandpass(u[:,0],u[:,1])}
+             
+g = np.loadtxt(package_directory + 'data/lsst_bands/lsst_g.dat')
+r = np.loadtxt(package_directory + 'data/lsst_bands/lsst_r.dat')
+i = np.loadtxt(package_directory + 'data/lsst_bands/lsst_i.dat')
+z = np.loadtxt(package_directory + 'data/lsst_bands/lsst_z.dat')
+y = np.loadtxt(package_directory + 'data/lsst_bands/lsst_i.dat')
+#u = np.loadtxt(package_directory + 'data/lsst_bands/lsst_u.dat')
+
+lsst_bands = {'g': S.ArrayBandpass (g[:,0],g[:,1]),
+            'r': S.ArrayBandpass(r[:,0],r[:,1]),
+            'i': S.ArrayBandpass(i[:,0],i[:,1]),
+            'z': S.ArrayBandpass(z[:,0],z[:,1]),
+            'y': S.ArrayBandpass(y[:,0],y[:,1]),
+            #'u': S.ArrayBandpass(u[:,0],u[:,1])}
 
 def get_pb_zpt(pb, reference='AB', model_mag=None):
     """
@@ -242,7 +256,7 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
 
 def get_skymapper_region(ra,dec,size=0.2*60**2):
     """
-    Get PS1 observations for a region.
+    Get Skymapper observations for a region.
     
     ------
     Inputs 
@@ -258,7 +272,7 @@ def get_skymapper_region(ra,dec,size=0.2*60**2):
     Returns
     -------
     final : `pandas Dataframe`
-        Table containing all relevant PS1 observations for each object entered 
+        Table containing all relevant Skymapper observations for each object entered 
         with the ra and dec lists.
     """
     if (type(ra) == float) | (type(ra) == np.float64):
@@ -302,6 +316,62 @@ def get_skymapper_region(ra,dec,size=0.2*60**2):
     return final
 
 
+def get_lsst_region(ra,dec,size=0.2*60**2):
+    """
+    Get LSST observations for a region.
+    
+    ------
+    Inputs 
+    ------
+    ra : `float`
+        RA of target
+    dec : `float`
+        Dec of target
+    size : `float`
+        Search radius in arcsec, 0.2 deg is a good default 
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant LSST observations for each object entered 
+        with the ra and dec lists.
+    """
+    if (type(ra) == float) | (type(ra) == np.float64):
+        ra = [ra]
+    if (type(dec) == float) | (type(dec) == np.float64):
+        dec = [dec]
+    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+    
+    Vizier.ROW_LIMIT = -1
+    
+    catalog = "II/349/lsst"
+    print('Querying regions with Vizier')
+    result = Vizier.query_region(coords, catalog=[catalog],
+                                 radius=Angle(size, "arcsec"))
+    no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or Vizier is unavailable')
+    if result is None:
+        raise no_targets_found_message
+    elif len(result) == 0:
+        raise no_targets_found_message
+    result = result[catalog].to_pandas()
+    r = deepcopy(result)
+    final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
+    final['ra'] = np.nan
+    final['dec'] = np.nan
+    final['g'] = np.nan; final['r'] = np.nan; final['u'] = np.nan;
+    final['i'] = np.nan; final['y'] = np.nan; final['z'] = np.nan
+    final['g_e'] = np.nan; final['r_e'] = np.nan; final['u_e'] = np.nan;
+    final['i_e'] = np.nan; final['y_e'] = np.nan; final['z_e'] = np.nan;
+    
+
+    #final['g'] = r['g___'].values; final['r'] = r['r___'].values; final['u'] = r['u___'].values
+ 
+    #final['ra'] = r['RA___'].values; final['dec'] = r['DE___'].values
+    #final = final.drop(['temp'], axis=1)
+
+    #return final
 
 def query_casjob_ps1(ra,dec,size=3):
     import mastcasjobs
@@ -561,8 +631,10 @@ def Tonry_reduce(Data,plot=False,savename=None,system='ps1'):
     data = deepcopy(Data)
     if system.lower() == 'ps1':
         tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
-    else:
+    elif system.lower() == 'skymapper':
         tonry = np.loadtxt(package_directory + 'data/SMspline.txt')
+    elif system.lower() == 'lsst':
+        tonry = np.loadtxt(package_directory + 'data/LSSTsplines.txt')
     compare = np.array([['r-i','g-r']])   
     
     dat = data
