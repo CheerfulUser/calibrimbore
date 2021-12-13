@@ -231,8 +231,8 @@ class sauron():
 			self._sys_bands = ps1_bands
 		elif self.system == 'skymapper':
 			self._sys_bands = skymapper_bands
-        elif self.system == 'lsst':
-            self._sys_bands = lsst_bands
+		elif self.system == 'lsst':
+			self._sys_bands = lsst_bands
 
 	def _check_system(self):
 		allowed = np.array(['ps1','skymapper','lsst'])
@@ -288,7 +288,7 @@ class sauron():
 			overlap = (np.trapz(func(self.band.wave) * self.band.throughput, x = self.band.wave) / 
 					   np.trapz(self.band.throughput, x = self.band.wave))
 			percentage += [overlap]
-			if overlap > 0.01:
+			if overlap > 0.05:
 				bands += pb
 		if bands == '':
 			raise ValueError(('No direct overlap with the ' + self.system + ' filters! ' + 
@@ -676,24 +676,24 @@ class sauron():
 			return 'PS1 '
 		elif self.system == 'skymapper':
 			return 'SkyMapper '
-        elif self.system == 'lsst':
-            return 'LSST'
+		elif self.system == 'lsst':
+			return 'LSST'
 
 	def _set_color_palette(self):
 		if self.system == 'ps1':
 			return ['g','r','k','m','sienna']
 		elif self.system == 'skymapper':
 			return ['g','r','k','m']
-        elif self.system == 'lsst':
-            return ['g','r','k','m','sienna']
+		elif self.system == 'lsst':
+			return ['g','r','k','m','sienna']
 
 	def _set_filts(self):
 		if self.system == 'ps1':
 			return 'grizy'
 		elif self.system == 'skymapper':
 			return 'griz'
-        elif self.system == 'lsst':
-            return 'grizy'
+		elif self.system == 'lsst':
+			return 'grizy'
 
 	def coverage_plot(self):
 		"""
@@ -734,12 +734,12 @@ class sauron():
 			plt.text(5800,1.03,'SM $r$',color='r',fontsize=12)
 			plt.text(7150,1.03,'SM $i$',color='k',fontsize=12)
 			plt.text(9000,1.03,'SM $z$',color='m',fontsize=12)
-        elif self.system == 'lsst':
-            plt.text(4500,1.03,'PS1 $g$',color='g',fontsize=12)
-			plt.text(5800,1.03,'PS1 $r$',color='r',fontsize=12)
-			plt.text(7150,1.03,'PS1 $i$',color='k',fontsize=12)
-			plt.text(8200,1.03,'PS1 $z$',color='m',fontsize=12)
-			plt.text(9200,1.03,'PS1 $y$',color='sienna',fontsize=12)
+		elif self.system == 'lsst':
+			plt.text(4500,1.03,'LSST $g$',color='g',fontsize=12)
+			plt.text(5800,1.03,'LSST $r$',color='r',fontsize=12)
+			plt.text(7150,1.03,'LSST $i$',color='k',fontsize=12)
+			plt.text(8200,1.03,'LSST $z$',color='m',fontsize=12)
+			plt.text(9200,1.03,'LSST $y$',color='sienna',fontsize=12)
 
 		plt.ylim(0,1.15)
 
@@ -965,8 +965,8 @@ class sauron():
 				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			elif self.system == 'skymapper':
 				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
-            elif self.system == 'lsst':
-                cal_stars = get_lsst_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+			elif self.system == 'lsst':
+				cal_stars = get_lsst_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			
 			e, dat = Tonry_reduce(cal_stars,system = self.system)
 
@@ -1008,8 +1008,8 @@ class sauron():
 					mags = get_ps1(ra, dec, size)
 				elif self.system == 'skymapper':
 					mags = get_skymapper(ra, dec, size)
-                elif self.system == 'lsst':
-                    mags = get_lsst(ra, dec, size)
+				elif self.system == 'lsst':
+					mags = get_lsst(ra, dec, size)
 
 			elif (catalog.lower == 'casjobs') & (self.system == ps1):
 				if (cas_id is not None) & (cas_pwd is not None):
