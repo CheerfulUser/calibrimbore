@@ -57,11 +57,11 @@ z = np.loadtxt(package_directory + 'data/skymapper_bands/sm_z.dat')
 #u = np.loadtxt(package_directory + 'data/skymapper_bands/sm_u.dat')
 
 skymapper_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
-             'r': S.ArrayBandpass(r[:,0],r[:,1]),
-             'i': S.ArrayBandpass(i[:,0],i[:,1]),  
-             'z': S.ArrayBandpass(z[:,0],z[:,1])}
-             #'v': S.ArrayBandpass(v[:,0],v[:,1]),
-             #'u': S.ArrayBandpass(u[:,0],u[:,1])}
+                   'r': S.ArrayBandpass(r[:,0],r[:,1]),
+                   'i': S.ArrayBandpass(i[:,0],i[:,1]),  
+                   'z': S.ArrayBandpass(z[:,0],z[:,1])}
+                   #'v': S.ArrayBandpass(v[:,0],v[:,1]),
+                   #'u': S.ArrayBandpass(u[:,0],u[:,1])}
              
 g = np.loadtxt(package_directory + 'data/lsst_bands/lsst_g.dat')
 r = np.loadtxt(package_directory + 'data/lsst_bands/lsst_r.dat')
@@ -71,12 +71,21 @@ y = np.loadtxt(package_directory + 'data/lsst_bands/lsst_y.dat')
 #u = np.loadtxt(package_directory + 'data/lsst_bands/lsst_u.dat')
 
 lsst_bands = {'g': S.ArrayBandpass (g[:,0],g[:,1]),
-            'r': S.ArrayBandpass(r[:,0],r[:,1]),
-            'i': S.ArrayBandpass(i[:,0],i[:,1]),
-            'z': S.ArrayBandpass(z[:,0],z[:,1]),
-            'y': S.ArrayBandpass(y[:,0],y[:,1])}
-            #'u': S.ArrayBandpass(u[:,0],u[:,1])}
+              'r': S.ArrayBandpass(r[:,0],r[:,1]),
+              'i': S.ArrayBandpass(i[:,0],i[:,1]),
+              'z': S.ArrayBandpass(z[:,0],z[:,1]),
+              'y': S.ArrayBandpass(y[:,0],y[:,1])}
+              #'u': S.ArrayBandpass(u[:,0],u[:,1])}
+'''
+g = np.loadtxt(package_directory + 'data/gaia_bands/gaia3_g.dat')
+b = np.loadtxt(package_directory + 'data/gaia_bands/gaia3_b.dat')
+r = np.loadtxt(package_directory + 'data/gaia_bands/gaia3_r.dat')
 
+gaia_bands = {'g': S.ArrayBandpass (b[:,0],b[:,1]),
+              'r': S.ArrayBandpass(g[:,0],g[:,1]),
+              'i': S.ArrayBandpass(r[:,0],r[:,1])}
+
+'''
 def get_pb_zpt(pb, reference='AB', model_mag=None):
     """
     Determines a passband zeropoint for synthetic photometry, given a reference

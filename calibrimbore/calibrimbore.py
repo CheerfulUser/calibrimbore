@@ -89,7 +89,7 @@ class sauron():
 		correction will be calculated for the composite magnitude.
 	"""
 	def __init__(self,band=None,name=None,system='ps1',filters='auto',
-				 gr_lims=None,gi_lims=None,mag_system='AB',
+				 gr_lims=None,gi_lims=None,spec_model='calspec',
 				 plot=False,make_comp=True, cubic_corr=True,
 				 calc_R=True,obstable=None, savename=None,
 				 load_state=None):
@@ -100,7 +100,9 @@ class sauron():
 			self.band = band
 			self.name = name
 			self.zp = None
-			self.mag_system = mag_system.lower()
+			self.mag_system = 'ab'
+			self.spec_model = spec_model.lower()
+			self._check_spec_model()
 			self.system = system.lower()
 			self._check_system()
 			self.savename = savename
@@ -222,7 +224,8 @@ class sauron():
 
 	def _load_sys_mags(self):
 		system = self.system
-		mags = np.load(package_directory+'data/calspec_ab_mags_' + system + '.npy',
+		spec_model = self.spec_model
+		mags = np.load(package_directory+'data/' + spec_model + '_ab_mags_' + system + '.npy',
 									allow_pickle=True).item()
 		return mags	
 
@@ -233,11 +236,19 @@ class sauron():
 			self._sys_bands = skymapper_bands
 		elif self.system == 'lsst':
 			self._sys_bands = lsst_bands
+		elif self.system == 'gaia':
+			self._sys_bands = gaia_bands
+
+	def _check_spec_model(self):
+		allowed = np.array(['calspec','ckmodel'])
+		if ~(self.spec_model == allowed).any():
+			m = self.spec_model + ' is not supported. Select from: \ncalspec \nckmodel'
+			raise ValueError(m)
 
 	def _check_system(self):
-		allowed = np.array(['ps1','skymapper','lsst'])
+		allowed = np.array(['ps1','skymapper','lsst','gaia'])
 		if ~(self.system == allowed).any():
-			m = self.system + ' is not supported. Select from: \nps1 \nskymapper \nlsst'
+			m = self.system + ' is not supported. Select from: \nps1 \nskymapper \nlsst \ngaia'
 			raise ValueError(m)
 
 	def _load_band(self):
@@ -319,7 +330,7 @@ class sauron():
 		mags : array 
 			Magnitudes for the input bandpass
 		"""
-		files = glob(package_directory+'data/calspec/*.dat')
+		files = glob(package_directory+'data/' + self.spec_model + '/*.dat')
 		files = np.array(files)
 		# make sure the mags are in the same order
 		files.sort()
@@ -526,6 +537,11 @@ class sauron():
 			c0[c0<0.01] = 0
 			# bandaid solution 
 			if self.system == 'skymapper':
+				# cover for the missing filter
+				c0 = np.append(c0,0)
+			elif self.system == 'gaia':
+				# cover for the missing filters
+				c0 = np.append(c0,0)
 				c0 = np.append(c0,0)
 		except:
 			c0 = self._make_c0()
@@ -678,6 +694,8 @@ class sauron():
 			return 'SkyMapper '
 		elif self.system == 'lsst':
 			return 'LSST'
+		elif self.system == 'gaia':
+			return 'Gaia'
 
 	def _set_color_palette(self):
 		if self.system == 'ps1':
@@ -686,6 +704,8 @@ class sauron():
 			return ['g','r','k','m']
 		elif self.system == 'lsst':
 			return ['g','r','k','m','sienna']
+		elif self.system == 'gaia':
+			return ['C0','g','r']
 
 	def _set_filts(self):
 		if self.system == 'ps1':
@@ -694,6 +714,8 @@ class sauron():
 			return 'griz'
 		elif self.system == 'lsst':
 			return 'grizy'
+		elif self.system == 'gaia':
+			return 'gri'
 
 	def coverage_plot(self):
 		"""
@@ -740,6 +762,10 @@ class sauron():
 			plt.text(7150,1.03,'LSST $i$',color='k',fontsize=12)
 			plt.text(8200,1.03,'LSST $z$',color='m',fontsize=12)
 			plt.text(9200,1.03,'LSST $y$',color='sienna',fontsize=12)
+		elif self.system == 'gaia':
+			plt.text(4500,1.03,'Gaia $B$',color='C0',fontsize=12)
+			plt.text(6000,1.03,'Gaia $G$',color='g',fontsize=12)
+			plt.text(7500,1.03,'Gaia $R$',color='r',fontsize=12)
 
 		plt.ylim(0,1.15)
 
@@ -1022,7 +1048,7 @@ class sauron():
 		if mags is None:
 			m = 'No sources provided! Either give an ra-dec list, or a table with the appropriate format'
 			raise ValueError(m)
-
+		self.cat_mags = mags
 		gr = mags['g'] - mags['r']
 		mag2 = deepcopy(mags)
 		

@@ -1,13 +1,8 @@
 include README.md LICENSE
 include calibrimbore/data/calspec/*
+include calibrimbore/data/ckmodel/*
 include calibrimbore/data/ps1_bands/*
 include calibrimbore/data/skymapper_bands/*
 include calibrimbore/data/lsst_bands/*
-include calibrimbore/data/Tonry_splines.txt
-include calibrimbore/data/SMspline.txt
-include calibrimbore/data/LSSTsplines.txt
-include calibrimbore/data/calspec_ab_mags_ps1.npy
-include calibrimbore/data/calspec_vega_mags_ps1.npy
-include calibrimbore/data/calspec_ab_mags_skymapper.npy
-include calibrimbore/data/calspec_ab_mags_lsst.npy
-
+include calibrimbore/data/*.txt
+include calibrimbore/data/*.npy
