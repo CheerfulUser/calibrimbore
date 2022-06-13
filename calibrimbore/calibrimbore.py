@@ -1003,8 +1003,52 @@ class sauron():
 		return ebv
 
 
+	def _match_sources(self,ra,dec,cat,seperation):
+		cra = cat['ra'].values
+		cdec = cat['dec'].values
+
+		dra = (ra[:,np.newaxis] - cra[np.newaxis,:])**2
+		ddec = (dec[:,np.newaxis] - cdec[np.newaxis,:])**2
+
+		d = np.sqrt(dra + ddec)
+		mins = np.nanmin(d,axis=1)
+		ind = mins > seperation
+		minind = np.nanargmin(d,axis=1)
+		ordered = cat.iloc[minind]
+		print('no matches ',sum(ind*1))
+		ordered.iloc[ind,:] = np.nan
+
+		return ordered
+
+
+
+
+	def _get_catalog(self,ra,dec,close=True,seperation=3):
+		if close:
+			print('close sources')
+			mra = np.nanmedian(ra)
+			mdec = np.nanmedian(dec)
+			size = (np.nanmax([abs(dec-mdec),abs(ra-mra)]) * 1.2)*60**2
+			if self.system == 'ps1':
+				cat = get_ps1_region(mra,mdec,size)
+			elif self.system == 'skymapper':
+				cat = get_skymapper_region(mra, mdec, size)
+			mags = self._match_sources(ra,dec,cat,seperation)
+		else:
+			if self.system == 'ps1':
+				mags = get_ps1(ra, dec, size)
+			elif self.system == 'skymapper':
+				mags = get_skymapper(ra, dec, size)
+			elif self.system == 'lsst':
+				mags = get_lsst(ra, dec, size)
+
+		return mags 
+
+
+
+
 	def estimate_mag(self,mags=None,ra=None,dec=None,correction=True,extinction=True,
-					 gr_lims = None,size=3,catalog='vizier'):
+					 gr_lims = None,size=3,catalog='vizier',close=False):
 		"""
 		Calculate the expected composite magnitude for all sources provided.
 		Either a table with the correct formatting or ra, and dec in deg can 
@@ -1030,12 +1074,7 @@ class sauron():
 		"""
 		if (ra is not None) & (dec is not None):
 			if catalog.lower() == 'vizier':
-				if self.system == 'ps1':
-					mags = get_ps1(ra, dec, size)
-				elif self.system == 'skymapper':
-					mags = get_skymapper(ra, dec, size)
-				elif self.system == 'lsst':
-					mags = get_lsst(ra, dec, size)
+				mags = self._get_catalog(ra,dec,close=close)
 
 			elif (catalog.lower == 'casjobs') & (self.system == ps1):
 				if (cas_id is not None) & (cas_pwd is not None):
@@ -1044,6 +1083,7 @@ class sauron():
 				else:	
 					print('No CASJobs credentials saved, so using Vizier to access PS1 DR1')
 					mags = get_ps1(ra, dec, size)
+			self.system_cat = mags
 		
 		if mags is None:
 			m = 'No sources provided! Either give an ra-dec list, or a table with the appropriate format'
