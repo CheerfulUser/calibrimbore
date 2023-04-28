@@ -1015,7 +1015,7 @@ class sauron():
 		ind = mins > seperation
 		minind = np.nanargmin(d,axis=1)
 		ordered = cat.iloc[minind]
-		print('no matches ',sum(ind*1))
+		#print('no matches ',sum(ind*1))
 		ordered.iloc[ind,:] = np.nan
 
 		return ordered
@@ -1025,7 +1025,7 @@ class sauron():
 
 	def _get_catalog(self,ra,dec,close=True,seperation=3):
 		if close:
-			print('close sources')
+			#print('close sources')
 			mra = np.nanmedian(ra)
 			mdec = np.nanmedian(dec)
 			size = (np.nanmax([abs(dec-mdec),abs(ra-mra)]) * 1.2)*60**2
@@ -1036,11 +1036,11 @@ class sauron():
 			mags = self._match_sources(ra,dec,cat,seperation)
 		else:
 			if self.system == 'ps1':
-				mags = get_ps1(ra, dec, size)
+				mags = get_ps1(ra, dec, seperation)
 			elif self.system == 'skymapper':
-				mags = get_skymapper(ra, dec, size)
+				mags = get_skymapper(ra, dec, seperation)
 			elif self.system == 'lsst':
-				mags = get_lsst(ra, dec, size)
+				mags = get_lsst(ra, dec, seperation)
 
 		return mags 
 
