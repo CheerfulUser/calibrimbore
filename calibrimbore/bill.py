@@ -296,7 +296,7 @@ def get_skymapper_region(ra,dec,size=0.2*60**2):
     Vizier.ROW_LIMIT = -1
     
     catalog = "II/358/smss"
-    print('Querying regions with Vizier')
+    #print('Querying regions with Vizier')
     result = Vizier.query_region(coords, catalog=[catalog],
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
@@ -358,7 +358,7 @@ def get_lsst_region(ra,dec,size=0.2*60**2):
     Vizier.ROW_LIMIT = -1
     
     catalog = "II/349/lsst"
-    print('Querying regions with Vizier')
+    #print('Querying regions with Vizier')
     result = Vizier.query_region(coords, catalog=[catalog],
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
@@ -458,7 +458,7 @@ def get_ps1(ra,dec,size=3):
     Vizier.ROW_LIMIT = -1
     
     catalog = "II/349/ps1"
-    print('Querying regions with Vizier')
+    #print('Querying regions with Vizier')
     result = Vizier.query_region(coords, catalog=[catalog],
                                  radius=Angle(size, "arcsec"))
     no_targets_found_message = ValueError('Either no sources were found in the query region '
