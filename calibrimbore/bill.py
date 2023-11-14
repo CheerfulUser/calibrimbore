@@ -4,7 +4,7 @@ from astroquery.vizier import Vizier
 from astropy.table import Table
 from astropy import units as u
 from astropy.coordinates import SkyCoord, Angle
-
+from astropy.io.votable import parse_single_table
 
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
@@ -264,9 +264,10 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
     final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
     final = final.drop(['temp'], axis=1)
+    final = final.sort_values('r')
     return final
 
-def get_skymapper_region(ra,dec,size=0.2*60**2):
+def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
     """
     Get Skymapper observations for a region.
     
@@ -292,39 +293,69 @@ def get_skymapper_region(ra,dec,size=0.2*60**2):
     if (type(dec) == float) | (type(dec) == np.float64):
         dec = [dec]
     coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
-    
-    Vizier.ROW_LIMIT = -1
-    
-    catalog = "II/358/smss"
-    #print('Querying regions with Vizier')
-    result = Vizier.query_region(coords, catalog=[catalog],
-                                 radius=Angle(size, "arcsec"))
-    no_targets_found_message = ValueError('Either no sources were found in the query region '
+    if vizier:
+        Vizier.ROW_LIMIT = -1
+        
+        catalog = "II/358/smss"
+        #print('Querying regions with Vizier')
+        result = Vizier.query_region(coords, catalog=[catalog],
+                                     radius=Angle(size, "arcsec"))
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
-    if result is None:
-        raise no_targets_found_message
-    elif len(result) == 0:
-        raise no_targets_found_message
-    result = result[catalog].to_pandas()
+        if result is None:
+            raise no_targets_found_message
+        elif len(result) == 0:
+            raise no_targets_found_message
+        result = result[catalog].to_pandas()
+    else:
+        result = None
+        for i in range(len(coords)):
+            RA = coords['_RAJ2000'][i]
+            DEC = coords['_DEJ2000'][i]
+            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1'
+            table = parse_single_table(html)
+            table = table.to_table().to_pandas()
+            if result is None:
+                result = table
+            else:
+                result = result.append(table, ignore_index=True)
+        result.drop_duplicates()
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or SkyMapper catalog is unavailable')
+        if len(result) == 0:
+            raise no_targets_found_message
+
+
+    
     r = deepcopy(result)
     final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
+
     final['ra'] = np.nan
     final['dec'] = np.nan
     final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
     final['z'] = np.nan; final['u'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
     final['z_e'] = np.nan; final['u_e'] = np.nan
+    if vizier:
+        ps = 'PSF'
+    else:
+        ps = '_psf'
+    final['g'] = r['g'+ps].values; final['r'] = r['r'+ps].values; final['i'] = r['i'+ps].values
+    final['z'] = r['z'+ps].values; final['u'] = r['u'+ps].values
+    if vizier:
+        final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
+        final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 
+        final['u_e'] = final['g'].values * np.nan 
+        final['ra'] = r['RAICRS'].values; final['dec'] = r['DEICRS'].values
+    else:
+        final['g_e'] = r['e_g_psf'].values; final['r_e'] = r['e_r_psf'].values
+        final['i_e'] = r['e_i_psf'].values; final['z_e'] = r['e_z_psf'].values
+        final['u_e'] = r['e_u_psf'].values
+        final['ra'] = r['raj2000'].values; final['dec'] = r['dej2000'].values
 
-    final['g'] = r['gPSF'].values; final['r'] = r['rPSF'].values; final['i'] = r['iPSF'].values
-    final['z'] = r['zPSF'].values; final['u'] = r['uPSF'].values
-
-    final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
-    final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 
-    final['u_e'] = final['g'].values * np.nan 
-
-    final['ra'] = r['RAICRS'].values; final['dec'] = r['DEICRS'].values
+    
     final = final.drop(['temp'], axis=1)
-
+    final = final.sort_values('r')
     return final
 
 
@@ -376,7 +407,7 @@ def get_lsst_region(ra,dec,size=0.2*60**2):
     final['i'] = np.nan; final['y'] = np.nan; final['z'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['u_e'] = np.nan;
     final['i_e'] = np.nan; final['y_e'] = np.nan; final['z_e'] = np.nan;
-    
+    final = final.sort_values('r')
 
     #final['g'] = r['g___'].values; final['r'] = r['r___'].values; final['u'] = r['u___'].values
  
@@ -453,6 +484,10 @@ def get_ps1(ra,dec,size=3):
         ra = [ra]
     if (type(dec) == float) | (type(dec) == np.float64):
         dec = [dec]
+    #if type(dec[0]) == str:
+
+     #   coords = Table(data=[ra*u.hourangle,dec*u.deg],names=['_RAJ2000','_DEJ2000']),unit=(u.hourangle, u.deg)
+    #else:
     coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
     
     Vizier.ROW_LIMIT = -1
@@ -502,9 +537,9 @@ def get_ps1(ra,dec,size=3):
     return final 
 
 
-def get_skymapper(ra,dec,size=3):
+def get_skymapper(ra,dec,size=3,vizier=False):
     """
-    Get PS1 observations for a list of coordinates.
+    Get SkyMapper observations for a list of coordinates.
     
     ------
     Inputs 
@@ -528,27 +563,47 @@ def get_skymapper(ra,dec,size=3):
     if (type(dec) == float) | (type(dec) == np.float64):
         dec = [dec]
     coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
-    
-    Vizier.ROW_LIMIT = -1
-    
-    catalog = "II/358/smss"
-    #print('Querying regions with Vizier')
-    result = Vizier.query_region(coords, catalog=[catalog],
-                                 radius=Angle(size, "arcsec"))
-    no_targets_found_message = ValueError('Either no sources were found in the query region '
+    if vizier:
+        Vizier.ROW_LIMIT = -1
+        
+        catalog = "II/358/smss"
+        #print('Querying regions with Vizier')
+        result = Vizier.query_region(coords, catalog=[catalog],
+                                     radius=Angle(size, "arcsec"))
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
-    if result is None:
-        raise no_targets_found_message
-    elif len(result) == 0:
-        raise no_targets_found_message
-    result = result[catalog].to_pandas()
+        if result is None:
+            raise no_targets_found_message
+        elif len(result) == 0:
+            raise no_targets_found_message
+        result = result[catalog].to_pandas()
+    else:
+        result = None
+        for i in range(len(coords)):
+            RA = coords['_RAJ2000'][i]
+            DEC = coords['_DEJ2000'][i]
+            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1'
+            table = parse_single_table(html)
+            table = table.to_table().to_pandas()
+            if result is None:
+                result = table
+            else:
+                result = result.append(table, ignore_index=True)
+        result.drop_duplicates()
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or SkyMapper catalog is unavailable')
+        if len(result) == 0:
+            raise no_targets_found_message
 
     targets = coords.to_pandas()
 
     dist = np.zeros((len(targets),len(result)))
-
-    dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['RAICRS'].values[np.newaxis,:])**2 +
-            (targets['_DEJ2000'].values[:,np.newaxis] - result['DEICRS'].values[np.newaxis,:])**2)
+    if vizier:
+        dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['RAICRS'].values[np.newaxis,:])**2 +
+                (targets['_DEJ2000'].values[:,np.newaxis] - result['DEICRS'].values[np.newaxis,:])**2)
+    else:
+        dist = ((targets['_RAJ2000'].values[:,np.newaxis] - result['raj2000'].values[np.newaxis,:])**2 +
+                (targets['_DEJ2000'].values[:,np.newaxis] - result['dej2000'].values[np.newaxis,:])**2)
 
     min_ind = np.argmin(dist,axis=1)
     ind = np.nanmin(dist,axis=1) <= size
@@ -565,16 +620,26 @@ def get_skymapper(ra,dec,size=3):
     final['z'] = np.nan; final['u'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
     final['z_e'] = np.nan; final['u_e'] = np.nan
+    if vizier:
+        ps = 'PSF'
+    else:
+        ps = '_psf'
+    final['g'].iloc[ind] = r['g'+ps].values[ind]; final['r'].iloc[ind] = r['r'+ps].values[ind] 
+    final['i'].iloc[ind] = r['i'+ps].values[ind]; final['z'].iloc[ind] = r['z'+ps].values[ind]
+    final['u'].iloc[ind] = r['u'+ps].values[ind]
+    if Vizier:
+        final['g_e'] = np.nanr['gPSF'].values[ind]*np.nan; final['r_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+        final['i_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['z_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+        final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
+        final['ra'].iloc[ind] = r['RAICRS'].values[ind]; final['dec'].iloc[ind] = r['DEICRS'].values[ind]
 
-    final['g'].iloc[ind] = r['gPSF'].values[ind]; final['r'].iloc[ind] = r['rPSF'].values[ind] 
-    final['i'].iloc[ind] = r['iPSF'].values[ind]; final['z'].iloc[ind] = r['zPSF'].values[ind]
-    final['u'].iloc[ind] = r['uPSF'].values[ind]
+    else:
+        final['g_e'].iloc[ind] = r['e_g_psf'].values[ind]; final['r_e'].iloc[ind] = r['e_r_psf'].values[ind]
+        final['i_e'].iloc[ind] = r['e_i_psf'].values[ind]; final['z_e'].iloc[ind] = r['e_z_psf'].values[ind]
+        final['u_e'].iloc[ind] = r['e_u_psf'].values[ind]
+        final['ra'].iloc[ind] = r['raj2000'].values[ind]; final['dec'].iloc[ind] = r['dej2000'].values[ind]
 
-    final['g_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['r_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
-    final['i_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan; final['z_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
-    final['u_e'].iloc[ind] = r['gPSF'].values[ind]*np.nan
-
-    final['ra'].iloc[ind] = r['RAICRS'].values[ind]; final['dec'].iloc[ind] = r['DEICRS'].values[ind]
+    
     return final 
 
 
