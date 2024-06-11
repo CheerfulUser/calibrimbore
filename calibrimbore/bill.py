@@ -288,6 +288,10 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         Table containing all relevant Skymapper observations for each object entered 
         with the ra and dec lists.
     """
+    if size > 60**2:
+        print('!!! Search area too large for SkyMapper DR2, using Vizier DR1.1 !!!')
+        vizier = True
+
     if (type(ra) == float) | (type(ra) == np.float64):
         ra = [ra]
     if (type(dec) == float) | (type(dec) == np.float64):
@@ -312,9 +316,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         for i in range(len(coords)):
             RA = coords['_RAJ2000'][i]
             DEC = coords['_DEJ2000'][i]
-            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1'
-            table = parse_single_table(html)
-            table = table.to_table().to_pandas()
+            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1&RESPONSEFORMAT=CSV'
+            table = pd.read_csv(html)
             if result is None:
                 result = table
             else:
@@ -582,9 +585,8 @@ def get_skymapper(ra,dec,size=3,vizier=False):
         for i in range(len(coords)):
             RA = coords['_RAJ2000'][i]
             DEC = coords['_DEJ2000'][i]
-            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1'
-            table = parse_single_table(html)
-            table = table.to_table().to_pandas()
+            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1&RESPONSEFORMAT=CSV'
+            table = pd.read_csv(html)
             if result is None:
                 result = table
             else:
