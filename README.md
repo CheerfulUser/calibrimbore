@@ -24,7 +24,7 @@ doesn't use these libraries pysynphot will complain if they are not visible!
 Once it is successfully installed, calibrating any optical filter to PS1 is easy and can be done in just a few steps:
 ```python
 from calibrimbore import sauron
-comp = sauron(band='path_to_filter',plot=True,system='ab',gr_lims=[-1,.8],cubic_corr=True)
+comp = sauron(band='path_to_filter',plot=True,system='ps1',gr_lims=[-1,.8],cubic_corr=True)
 ```
 This will go through all the nescissary calibration steps to calculate the linear combination of PS1 filters 
 to best replicate the chosen bandpass, calculate a residual cubic colour correction term and calculate 
