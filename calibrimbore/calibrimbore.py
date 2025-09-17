@@ -13,6 +13,7 @@ from copy import deepcopy
 from scipy.interpolate import UnivariateSpline
 from astropy.io import ascii
 from astropy.table import Table
+from IPython.display import display, Math
 
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
@@ -92,7 +93,7 @@ class sauron():
 				 gr_lims=None,gi_lims=None,spec_model='calspec',
 				 plot=False,make_comp=True, cubic_corr=True,
 				 calc_R=True,obstable=None, savename=None,
-				 load_state=None):
+				 load_state=None,color_correction=True):
 		"""
 		Setup the class.
 		"""
@@ -102,6 +103,7 @@ class sauron():
 			self.zp = None
 			self.mag_system = 'ab'
 			self.spec_model = spec_model.lower()
+			self.color_correction = color_correction
 			self._check_spec_model()
 			self.system = system.lower()
 			self._check_system()
@@ -140,9 +142,15 @@ class sauron():
 			self.spline = None
 			self.cubic_coeff = None
 			self.gr = self.sys_mags['g'] - self.sys_mags['r']
+			
+			ind = (self.gr < 0.26855) | (self.gr > 0.2688)
 			if self.gr_lims is not None:
-				ind = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
+				ind2 = (self.gr > self.gr_lims[0]) & (self.gr < self.gr_lims[1])
+				ind = ind & ind2
 				self.gr = self.gr[ind]
+
+			#self.gr = self.gr[ind]
+			self._grind = ind
 
 
 			# Make the composite filter function
@@ -232,6 +240,8 @@ class sauron():
 	def _load_sys_bands(self):
 		if self.system == 'ps1':
 			self._sys_bands = ps1_bands
+		elif self.system == 'decam':
+			self._sys_bands = decam_bands
 		elif self.system == 'skymapper':
 			self._sys_bands = skymapper_bands
 		elif self.system == 'lsst':
@@ -246,9 +256,9 @@ class sauron():
 			raise ValueError(m)
 
 	def _check_system(self):
-		allowed = np.array(['ps1','skymapper','lsst','gaia'])
+		allowed = np.array(['ps1','decam','skymapper','lsst','gaia'])
 		if ~(self.system == allowed).any():
-			m = self.system + ' is not supported. Select from: \nps1 \nskymapper \nlsst \ngaia'
+			m = self.system + ' is not supported. Select from: \nps1 \nskymapper \nlsst \ngaia \ndecam'
 			raise ValueError(m)
 
 	def _load_band(self):
@@ -428,8 +438,12 @@ class sauron():
 
 		#if coeff is None:
 		coeff = self.coeff
-		comp = (coeff[0]*g + coeff[1]*r + coeff[2]*i +coeff[3]*z +
-				coeff[4]*y)*(g/i)**(coeff[5])
+		if self.color_correction:
+			comp = (coeff[0]*g + coeff[1]*r + coeff[2]*i +coeff[3]*z +
+					coeff[4]*y)*(g/i)**(coeff[5])
+		else:
+			comp = (coeff[0]*g + coeff[1]*r + coeff[2]*i +coeff[3]*z +
+					coeff[4]*y)
 
 		comp = -2.5*np.log10(comp) + 25 # default PS1 image zeropoint
 
@@ -463,14 +477,19 @@ class sauron():
 			Sum of the absolute value of the difference between 
 			model and composite magnitudes.
 		"""
+
 		self.coeff = coeff
 		self.make_composite()
+		
 		if self.gr_lims is not None:
-			ind = (((self.sys_mags['g'] - self.sys_mags['r']) > self.gr_lims[0]) & 
-					((self.sys_mags['g'] - self.sys_mags['r']) < self.gr_lims[1]))
+			gr = self.sys_mags['g'] - self.sys_mags['r']
+			ind = ((gr > self.gr_lims[0]) & 
+					(gr < self.gr_lims[1])) 
+			ind2 = (gr < 0.26855) | (gr > 0.2688)	
+			ind = ind & ind2
 		elif self.gi_lims is not None:
-			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gr_lims[0]) & 
-					((self.sys_mags['g'] - self.sys_mags['i']) < self.gr_lims[1]))
+			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gi_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['i']) < self.gi_lims[1]))
 		else:
 			ind = np.isfinite(self.sys_mags['g'])
 		self.diff = self.mags[ind] - self.comp[ind]
@@ -485,7 +504,10 @@ class sauron():
 		Set up the initial ceofficient guesses for when the filters are manually defined 
 		(its pretty lazy!).
 		"""
-		c0 = np.array([0,0,0,0,0,0.01])
+		if self.color_correction:
+			c0 = np.array([0,0,0,0,0,0.01])
+		else:
+			c0 = np.array([0,0,0,0,0])
 		if 'g' in self.sys_filters:
 			c0[0] += 0.1
 		if 'r' in self.sys_filters:
@@ -523,8 +545,9 @@ class sauron():
 				bds += [(0,2)]
 			else:
 				bds += [(0,1e-10)]
+		if self.color_correction:
+			bds += [(-10,10)]
 
-		bds += [(-10,10)]
 		return bds
 
 	def fit_comp(self):
@@ -533,10 +556,16 @@ class sauron():
 		flux coefficients.
 		"""
 		try:
-			c0 = np.append(self.sys_overlap,0)
+			if self.color_correction:
+				c0 = np.append(self.sys_overlap,0)
+			else:
+				c0 = self.sys_overlap
 			c0[c0<0.01] = 0
 			# bandaid solution 
 			if self.system == 'skymapper':
+				# cover for the missing filter
+				c0 = np.append(c0,0)
+			elif self.system == 'decam':
 				# cover for the missing filter
 				c0 = np.append(c0,0)
 			elif self.system == 'gaia':
@@ -550,10 +579,32 @@ class sauron():
 		res = minimize(self.comp_minimizer,c0,bounds=bds)
 		self.mask = ~sigma_clip(self.diff,sigma=3).mask
 		res = minimize(self.comp_minimizer,res.x,bounds=bds)
-
-		self.coeff = res.x 
+		coeff = res.x
+		self.coeff = coeff
+		#self.comp_filt = ((coeff[0]*g + coeff[1]*r + coeff[2]*i +
+		#				   coeff[3]*z + coeff[4]*y)*(g/i)**(coeff[5]))
 		self.fit_res = res
 
+		
+		#def _comp2_minimizer(c0,bounds)
+
+		def fit_comp2(self):
+			try:
+				c0 = np.append(self.sys_overlap,0)
+				c0[c0<0.01] = 0
+				# bandaid solution 
+				if self.system == 'skymapper':
+					# cover for the missing filter
+					c0 = np.append(c0,0)
+				elif self.system == 'decam':
+					# cover for the missing filter
+					c0 = np.append(c0,0)
+				elif self.system == 'gaia':
+					# cover for the missing filters
+					c0 = np.append(c0,0)
+					c0 = np.append(c0,0)
+			except:
+				c0 = self._make_c0()
 
 	
 
@@ -591,21 +642,36 @@ class sauron():
 		self.cubic_coeff = res.x
 
 
+	def _make_eqn(self):
+		eqn = r'$f_{comp}=\left('
+
+		var = [r'f_g',r'f_r',r'f_i',r'f_z',r'f_y']
+		for i in range(5):
+			if self.coeff[i] > 0.001:
+				eqn += str(np.round(self.coeff[i],3)) + var[i] 
+				if self.color_correction:
+					cond = (self.coeff[i+1:-1] > 0.001).any()
+				else:
+					if (i < 4):
+						cond = (self.coeff[i+1] > 0.001).any() 
+					else:
+						cond = False
+				if (i < 4) & cond:
+					eqn += '+'
+		if self.color_correction:
+			eqn += r'\right)\left(\frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + r'}$'
+		else:
+			eqn += r'\right)$'
+		return eqn
+
+
 	def print_comp(self):
 		"""
 		Print the composite flux function in a nice way.
 		"""
 		from IPython.display import display, Math
-		eqn = r'$f_{comp}=\left('
+		display(Math(self._make_eqn()))
 
-		var = ['f_g','f_r','f_i','f_z','f_y']
-		for i in range(5):
-			if self.coeff[i] > 0.001:
-				eqn += str(np.round(self.coeff[i],3)) + var[i] 
-				if (i < 4) & (self.coeff[i+1:-1] > 0.001).any():
-					eqn += '+'
-		eqn += r'\right)\left( \frac{f_g}{f_i}\right)^{' + str(np.round(self.coeff[5],3)) + '}$'
-		display(Math(eqn))
 
 	def ascii_comp(self):
 		"""
@@ -619,7 +685,10 @@ class sauron():
 				eqn += str(np.round(self.coeff[i],3)) + var[i] 
 				if (i < 4) & (self.coeff[i+1:-1] > 0.001).any():
 					eqn += '+'
-		eqn += r')(f_g/f_i)^(' + str(np.round(self.coeff[5],3)) + ')'
+		if self.color_correction:
+			eqn += r')(f_g/f_i)^(' + str(np.round(self.coeff[5],3)) + ')'
+		else:
+			eqn += r')'
 		return eqn
 
 	def save_transform(self,name=None,save_fmt='ascii'):
@@ -650,25 +719,33 @@ class sauron():
 			coeffs.to_csv(name+'.csv',index=False)
 			print('saved as ' + name + '.csv')
 
-
+	def _cubic_cor_string(self):
+		coeff = self.cubic_coeff
+		eqn = r'$m_c=$' + str(np.round(coeff[0],3)) 
+		if coeff[1] > 0:
+			eqn += r'$+$'
+		else:
+			eqn += r'$-$'
+		eqn += str(abs(np.round(coeff[1],4))) + r'$(g-r)$' 
+		if coeff[2] > 0:
+			eqn += r'$+$'
+		else:
+			eqn += r'$-$'
+		eqn += str(abs(np.round(coeff[2],4))) + r'$(g-r)^2$' 
+		if coeff[3] > 0:
+			eqn += r'$+$'
+		else:
+			eqn += r'$-$'
+		eqn += str(abs(np.round(coeff[3],4))) + r'$(g-r)^3$'
+		return eqn
 
 	def print_cubic_correction(self):
 		"""
 		Print the cubic correction polynomial with nice formatting.
 		"""
 		from IPython.display import display, Math
-		coeff = self.cubic_coeff
-		eqn = r'$m_c=' + str(np.round(coeff[0],3)) 
-		if coeff[1] > 0:
-			eqn += '+'
-		eqn += str(np.round(coeff[1],4)) + '(g-r)' 
-		if coeff[2] > 0:
-			eqn += '+'
-		eqn += str(np.round(coeff[2],4)) + '(g-r)^2' 
-		if coeff[3] > 0:
-			eqn += '+'
-		eqn += str(np.round(coeff[3],4)) + '(g-r)^3'
-		display(Math(eqn))
+		
+		display(Math(self._cubic_cor_string()))
 
 	def ascii_cubic_correction(self):
 		"""
@@ -690,6 +767,8 @@ class sauron():
 	def _set_plot_label(self):
 		if self.system == 'ps1':
 			return 'PS1 '
+		elif self.system == 'decam':
+			return 'DECam '
 		elif self.system == 'skymapper':
 			return 'SkyMapper '
 		elif self.system == 'lsst':
@@ -700,6 +779,8 @@ class sauron():
 	def _set_color_palette(self):
 		if self.system == 'ps1':
 			return ['g','r','k','m','sienna']
+		elif self.system == 'decam':
+			return ['g','r','k','m']
 		elif self.system == 'skymapper':
 			return ['g','r','k','m']
 		elif self.system == 'lsst':
@@ -711,6 +792,8 @@ class sauron():
 		if self.system == 'ps1':
 			return 'grizy'
 		elif self.system == 'skymapper':
+			return 'griz'
+		elif self.system == 'decam':
 			return 'griz'
 		elif self.system == 'lsst':
 			return 'grizy'
@@ -750,6 +833,12 @@ class sauron():
 			plt.text(7150,1.03,'PS1 $i$',color='k',fontsize=12)
 			plt.text(8200,1.03,'PS1 $z$',color='m',fontsize=12)
 			plt.text(9200,1.03,'PS1 $y$',color='sienna',fontsize=12)
+		elif self.system == 'decam':
+			plt.text(4500,1.03,'DECam $g$',color='g',fontsize=12)
+			plt.text(5800,1.03,'DECam $r$',color='r',fontsize=12)
+			plt.text(7150,1.03,'DECam $i$',color='k',fontsize=12)
+			plt.text(8200,1.03,'DECam $z$',color='m',fontsize=12)
+			#plt.text(9200,1.03,'DECam $y$',color='sienna',fontsize=12)
 		elif self.system == 'skymapper':
 			#plt.text(3200,1.03,'SM $u$',color='cyan',fontsize=12)
 			plt.text(4500,1.03,'SM $g$',color='g',fontsize=12)
@@ -785,13 +874,16 @@ class sauron():
 		gi = False
 		# apply colour limits
 		if self.gr_lims is not None:
-			ind = (((self.sys_mags['g'] - self.sys_mags['r']) > self.gr_lims[0]) & 
-					((self.sys_mags['g'] - self.sys_mags['r']) < self.gr_lims[1]))
-			x = (self.sys_mags['g'] - self.sys_mags['r'])[ind]
+			gr = self.sys_mags['g'] - self.sys_mags['r']
+			ind = ((gr > self.gr_lims[0]) & 
+					(gr < self.gr_lims[1])) 
+			ind2 = (gr < 0.26855) | (gr > 0.2688)	
+			ind = ind & ind2
+			x = gr[ind]
 			gi = False
 		elif self.gi_lims is not None:
-			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gr_lims[0]) & 
-					((self.sys_mags['g'] - self.sys_mags['i']) < self.gr_lims[1]))
+			ind = (((self.sys_mags['g'] - self.sys_mags['i']) > self.gi_lims[0]) & 
+					((self.sys_mags['g'] - self.sys_mags['i']) < self.gi_lims[1]))
 			x = (self.sys_mags['g'] - self.sys_mags['i'])[ind]
 			gi = True
 		else:
@@ -815,8 +907,8 @@ class sauron():
 			plt.figure(figsize=(3*fig_width,1*fig_width))
 			plt.subplot(121)
 		
-		if self.name is not None:
-			plt.suptitle(self.name)
+		#if self.name is not None:
+		#	plt.suptitle(self.name)
 
 		b = int(np.nanmax(diff) - np.nanmin(diff) /(2*iqr(diff)*len(diff)**(-1/3)))
 		if b > 10:
@@ -888,6 +980,15 @@ class sauron():
 			else:
 				plt.xlabel(r'$g-r$ (mag)',fontsize=15)
 			plt.ylabel(r'Cal$-$Comp (mmag)',fontsize=15)
+		if self.savename is not None:
+			title = r''+self.savename+'\n'+self._make_eqn()
+		else:
+			title = r'Input filter'+'\n'+self._make_eqn()
+
+		if self.cubic_corr:
+			title += r',  ' + self._cubic_cor_string()
+
+		plt.suptitle(title)
 
 		plt.tight_layout()
 
@@ -988,7 +1089,9 @@ class sauron():
 		while np.isnan(ebv).any():
 			i = np.where(np.isnan(ebv))[0][0]
 			if self.system == 'ps1':
-				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
+			elif self.system == 'decam':
+				cal_stars = get_decam_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			elif self.system == 'skymapper':
 				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			elif self.system == 'lsst':
@@ -998,7 +1101,7 @@ class sauron():
 
 			dist = np.sqrt((mags['ra'].values - mags['ra'].iloc[i])**2 + 
 							(mags['dec'].values - mags['dec'].iloc[i])**2)
-			ind = dist < .2*60**2
+			ind = dist < .2
 			ebv[ind] = e
 		return ebv
 
@@ -1016,27 +1119,32 @@ class sauron():
 		minind = np.nanargmin(d,axis=1)
 		ordered = cat.iloc[minind]
 		#print('no matches ',sum(ind*1))
-		ordered.iloc[ind,:] = np.nan
+		#set everything with seperations > 5 arcsec to nan
+		ordered.iloc[ind,:] = np.nan 
 
 		return ordered
 
 
 
 
-	def _get_catalog(self,ra,dec,close=True,seperation=3):
+	def _get_catalog(self,ra,dec,close=True,seperation=5/60**2):
 		if close:
 			#print('close sources')
 			mra = np.nanmedian(ra)
 			mdec = np.nanmedian(dec)
-			size = (np.nanmax([abs(dec-mdec),abs(ra-mra)]) * 1.2)*60**2
+			size = (np.nanmax([abs(dec-mdec),abs(ra-mra)]) * 1.1) # size in degrees 
 			if self.system == 'ps1':
 				cat = get_ps1_region(mra,mdec,size)
+			elif self.system == 'decam':
+				cat = get_decam_region(mra,mdec,size)
 			elif self.system == 'skymapper':
 				cat = get_skymapper_region(mra, mdec, size)
 			mags = self._match_sources(ra,dec,cat,seperation)
 		else:
 			if self.system == 'ps1':
 				mags = get_ps1(ra, dec, seperation)
+			if self.system == 'decam':
+				mags = get_decam(ra, dec, seperation)
 			elif self.system == 'skymapper':
 				mags = get_skymapper(ra, dec, seperation)
 			elif self.system == 'lsst':
@@ -1111,6 +1219,7 @@ class sauron():
 			ebv = self.get_extinctions(mag2)
 		else:
 			ebv = np.zeros(len(mag2['g']))
+		self.ebv = ebv
 
 		comp = self.make_composite(mags = mag2,ext=ebv)
 		if self.cubic_corr:

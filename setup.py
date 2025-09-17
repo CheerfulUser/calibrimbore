@@ -13,12 +13,12 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'calibrimbore'
-DESCRIPTION = 'Calibrate photometric systems to PS1.'
+DESCRIPTION = 'Calibrate photometric systems to PS1, DECam, and SkyMapper.'
 URL = 'https://github.com/CheerfulUser/calibrimbore'
-EMAIL = 'rridden@stsci.edu'
-AUTHOR ='Ryan Ridden-Harper'
+EMAIL = 'ryanridden@canterbury.ac.nz'
+AUTHOR ='Ryan Ridden'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.1.0'
+VERSION = '1.0.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = ['numpy', 
@@ -28,7 +28,8 @@ REQUIRED = ['numpy',
             'pandas',
             'scipy!=1.4.0,!=1.4.1,>=0.19.0',
             'astropy',
-            'astroquery']
+            'astroquery',
+            'astro-datalab']
 
 # What packages are optional?
 EXTRAS = {

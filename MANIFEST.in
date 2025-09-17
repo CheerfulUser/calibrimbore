@@ -4,5 +4,6 @@ include calibrimbore/data/ckmodel/*
 include calibrimbore/data/ps1_bands/*
 include calibrimbore/data/skymapper_bands/*
 include calibrimbore/data/lsst_bands/*
+include calibrimbore/data/decam_bands/*
 include calibrimbore/data/*.txt
 include calibrimbore/data/*.npy

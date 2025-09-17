@@ -49,6 +49,18 @@ ps1_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
              'z': S.ArrayBandpass(z[:,0],z[:,1]),
              'y': S.ArrayBandpass(y[:,0],y[:,1])}
 
+g = np.loadtxt(package_directory + 'data/decam_bands/decam_g.dat')
+r = np.loadtxt(package_directory + 'data/decam_bands/decam_r.dat')
+i = np.loadtxt(package_directory + 'data/decam_bands/decam_i.dat')
+z = np.loadtxt(package_directory + 'data/decam_bands/decam_z.dat')
+y = np.loadtxt(package_directory + 'data/decam_bands/decam_y.dat')
+
+decam_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
+               'r': S.ArrayBandpass(r[:,0],r[:,1]),
+               'i': S.ArrayBandpass(i[:,0],i[:,1]),  
+               'z': S.ArrayBandpass(z[:,0],z[:,1])}
+               #'y': S.ArrayBandpass(y[:,0],y[:,1])} # dissable for now since not in DELVE
+
 g = np.loadtxt(package_directory + 'data/skymapper_bands/sm_g.dat')
 r = np.loadtxt(package_directory + 'data/skymapper_bands/sm_r.dat')
 i = np.loadtxt(package_directory + 'data/skymapper_bands/sm_i.dat')
@@ -205,7 +217,53 @@ def synmag(spec, pb, zp=0.):
     m = -2.5*np.log10(flux) + zp
     return m
 
-def get_ps1_region(ra,dec,size=0.2*60**2):
+def isolate_stars(cat,only_stars=False,Qf_lim=0.85,psfkron_diff=0.05):
+    qf_ind = ((cat.gQfPerfect.values > Qf_lim) & (cat.rQfPerfect.values > Qf_lim) & 
+              (cat.iQfPerfect.values > Qf_lim) & (cat.zQfPerfect.values > Qf_lim))
+    kron_ind = (cat.rMeanPSFMag.values - cat.rMeanKronMag.values) < psfkron_diff
+    ind = qf_ind & kron_ind
+    if only_stars:
+        cat = cat.iloc[ind]
+        cat.loc[:,'star'] = 1
+    else:
+        cat.loc[:,'star'] = 0
+        cat.loc[ind,'star'] = 1
+    return cat 
+
+def cut_bad_detections(cat):
+    ind = (cat.rMeanPSFMag.values > 0) & (cat.iMeanPSFMag.values > 0) & (cat.zMeanPSFMag.values > 0)
+    return cat.iloc[ind]
+
+def query_ps1(ra,dec,radius=5/60,maglim=25,ref_filt='r',only_stars=False,catversion='dr2'):
+    '''
+    radius is in degrees !!
+    '''
+    if (catversion.lower() != 'dr2') & (catversion.lower() != 'dr1'):
+        m = 'Version must be dr2, or dr1'
+        raise ValueError(m)
+    coords = f'https://catalogs.mast.stsci.edu/api/v0.1/panstarrs/{catversion.lower()}/mean?ra={ra}&dec={dec}&radius={radius}'
+    conditions = f'&nDetections.gte=5&{ref_filt}MeanPSFMag.gte=0&{ref_filt}MeanPSFMag.lte={maglim}&pagesize=-1&format=csv'
+    html = coords + conditions
+    try:
+        cat = pd.read_csv(html)
+        cat['ra'] = cat['raMean']
+        cat['dec'] = cat['decMean']
+        cat['r'] = cat['rMeanPSFMag']
+        cat['i'] = cat['iMeanPSFMag']
+        cat['g'] = cat['gMeanPSFMag']
+        cat['z'] = cat['zMeanPSFMag']
+        cat['y'] = cat['yMeanPSFMag']
+    except pd.errors.EmptyDataError:
+        print('No detections')
+        cat = []
+    cat = isolate_stars(cat,only_stars=only_stars)
+    #cat = cut_bad_detections(cat)
+    ind = cat
+    cat = cat.mask(cat < -900,np.nan)
+    return cat 
+
+
+def get_ps1_region(ra,dec,size=0.2,maglim=25,vizier=False):
     """
     Get PS1 observations for a region.
     
@@ -217,7 +275,7 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     dec : `float`
         Dec of target
     size : `float`
-        Search radius in arcsec, 0.2 deg is a good default 
+        Search radius in deg, 0.2 deg is a good default 
     
     -------
     Returns
@@ -226,25 +284,33 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
         Table containing all relevant PS1 observations for each object entered 
         with the ra and dec lists.
     """
-    if (type(ra) == float) | (type(ra) == np.float64):
-        ra = [ra]
-    if (type(dec) == float) | (type(dec) == np.float64):
-        dec = [dec]
-    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
-    
-    Vizier.ROW_LIMIT = -1
-    
-    catalog = "II/349/ps1"
-    #print('Querying regions with Vizier')
-    result = Vizier.query_region(coords, catalog=[catalog],
-                                 radius=Angle(size, "arcsec"))
+    if vizier:
+        if (type(ra) == float) | (type(ra) == np.float64):
+            ra = [ra]
+        if (type(dec) == float) | (type(dec) == np.float64):
+            dec = [dec]
+        coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+        
+        Vizier.ROW_LIMIT = -1
+        
+        catalog = "II/349/ps1"
+        #print('Querying regions with Vizier')
+        result = Vizier.query_region(coords, catalog=[catalog],
+                                     radius=Angle(size, "arcsec"))
+        if result is None:
+            raise no_targets_found_message
+        elif len(result) == 0:
+            raise no_targets_found_message
+        result = result[catalog].to_pandas()
+    else:
+        result = query_ps1(ra,dec,radius=size,maglim=maglim)
+        if len(result) == 0:
+            raise no_targets_found_message
+
+
     no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
-    if result is None:
-        raise no_targets_found_message
-    elif len(result) == 0:
-        raise no_targets_found_message
-    result = result[catalog].to_pandas()
+    
     r = deepcopy(result)
     final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
     final['ra'] = np.nan
@@ -254,15 +320,102 @@ def get_ps1_region(ra,dec,size=0.2*60**2):
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
     final['z_e'] = np.nan; final['y_e'] = np.nan
 
+
     # assign magnitudes to the table and apply the DA WD calibration to PS1 DR1
     # from Narayan 2019
-    final['g'] = r['gmag'].values - 12e-3; final['r'] = r['rmag'].values - 4e-3
-    final['i'] = r['imag'].values - 13e-3; final['z'] = r['zmag'].values - 7e-3
-    final['y'] = r['ymag'].values # no correction for y
+    if vizier:
+        
+        final['g'] = r['gmag'].values - 12e-3; final['r'] = r['rmag'].values - 4e-3
+        final['i'] = r['imag'].values - 13e-3; final['z'] = r['zmag'].values - 7e-3
+        final['y'] = r['ymag'].values # no correction for y
 
-    final['g_e'] = r['e_gmag'].values; final['r_e'] = r['e_rmag'].values; final['i_e'] = r['e_imag'].values
-    final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
-    final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
+        final['g_e'] = r['e_gmag'].values; final['r_e'] = r['e_rmag'].values; final['i_e'] = r['e_imag'].values
+        final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
+        final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
+    else:
+        final['g'] = r['g'].values - 12e-3; final['r'] = r['r'].values - 4e-3
+        final['i'] = r['i'].values - 13e-3; final['z'] = r['z'].values - 7e-3
+        final['y'] = r['y'].values # no correction for y
+
+        final['g_e'] = r['gMeanPSFMagErr'].values; final['r_e'] = r['rMeanPSFMagErr'].values; final['i_e'] = r['iMeanPSFMagErr'].values
+        final['z_e'] = r['zMeanPSFMagErr'].values; final['y_e'] = r['yMeanPSFMagErr'].values
+        final['ra'] = r['raMean'].values; final['dec'] = r['decMean'].values
+
+    final = final.drop(['temp'], axis=1)
+    final = final.sort_values('r')
+    return final
+
+def get_decam_region(ra,dec,size=0.2):
+    """
+    Get DECam observations for a region.
+    
+    ------
+    Inputs 
+    ------
+    ra : `float`
+        RA of target
+    dec : `float`
+        Dec of target
+    size : `float`
+        Search radius in deg, 0.2 deg is a good default 
+    
+    -------
+    Returns
+    -------
+    final : `pandas Dataframe`
+        Table containing all relevant DECam observations for each object entered 
+        with the ra and dec lists.
+    """
+    from dl import queryClient as qc
+    if (type(ra) == float) | (type(ra) == np.float64):
+        ra = [ra]
+    if (type(dec) == float) | (type(dec) == np.float64):
+        dec = [dec]
+    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+    
+    query = f"""
+        SELECT o.quick_object_id,o.ra, o.dec,
+        o.mag_psf_g,o.mag_psf_r,o.mag_psf_i,o.mag_psf_z,
+        o.mag_auto_g,o.mag_auto_r,o.mag_auto_i,o.mag_auto_z,
+        o.magerr_psf_g,o.magerr_psf_r,o.magerr_psf_i,o.magerr_psf_z,
+        o.magerr_auto_g,o.magerr_auto_r,o.magerr_auto_i,o.magerr_auto_z,
+        o.extended_class_g, o.extended_class_r,o.extended_class_i,o.extended_class_z
+        FROM delve_dr2.objects AS o
+        WHERE q3c_radial_query(ra,dec,{ra},{dec},{size})
+        """
+    try:
+        result = qc.query(sql=query,fmt='pandas')
+        result.replace(99.0,np.nan,inplace=True)
+        result['star'] = 0
+        ty = []
+        val = result[['extended_class_g','extended_class_r','extended_class_i','extended_class_z']].values
+        for v in val:
+            if 3 in v:
+                ty += [0]
+            elif 1 in v:
+                ty += [1]
+            else:
+                ty += [2]
+        result['star'] = ty
+        return result
+    except:
+        return
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                          'or SkyMapper catalog is unavailable')
+        if len(result) == 0:
+            raise no_targets_found_message
+
+
+    
+    r = deepcopy(result)
+    final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
+
+    final['ra'] = r['ra']
+    final['dec'] = r['dec']
+    final['g'] = r['mag_psf_g']; final['r'] = r['mag_psf_r']; final['i'] = r['mag_psf_i'];
+    final['z'] = r['mag_psf_z']; final['u'] = r['mag_psf_u']
+    final['g_e'] = r['magerr_psf_g']; final['r_e'] = r['magerr_psf_r']; final['i_e'] = r['magerr_psf_i'];
+    final['z_e'] = r['magerr_psf_z']; final['u_e'] = r['magerr_psf_u']
     final = final.drop(['temp'], axis=1)
     final = final.sort_values('r')
     return final
@@ -316,7 +469,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         for i in range(len(coords)):
             RA = coords['_RAJ2000'][i]
             DEC = coords['_DEJ2000'][i]
-            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size/60**2}&VERB=1&RESPONSEFORMAT=CSV'
+            # search radius is in deg
+            html = f'https://skymapper.anu.edu.au/sm-cone/public/query?RA={RA}&DEC={DEC}&SR={size}&VERB=1&RESPONSEFORMAT=CSV'
             table = pd.read_csv(html)
             if result is None:
                 result = table
@@ -462,7 +616,7 @@ def ps1_casjobs(ra,dec,size=3):
     #result.iloc[ind] = np.nan
     return result
 
-def get_ps1(ra,dec,size=3):
+def get_ps1(ra,dec,size=3,vizier=False):
     """
     Get PS1 observations for a list of coordinates.
     
@@ -483,22 +637,28 @@ def get_ps1(ra,dec,size=3):
         Table containing all relevant PS1 observations for each object entered 
         with the ra and dec lists.
     """
-    if (type(ra) == float) | (type(ra) == np.float64):
-        ra = [ra]
-    if (type(dec) == float) | (type(dec) == np.float64):
-        dec = [dec]
-    #if type(dec[0]) == str:
+    if vizier:
+        if (type(ra) == float) | (type(ra) == np.float64):
+            ra = [ra]
+        if (type(dec) == float) | (type(dec) == np.float64):
+            dec = [dec]
+        #if type(dec[0]) == str:
 
-     #   coords = Table(data=[ra*u.hourangle,dec*u.deg],names=['_RAJ2000','_DEJ2000']),unit=(u.hourangle, u.deg)
-    #else:
-    coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
-    
-    Vizier.ROW_LIMIT = -1
-    
-    catalog = "II/349/ps1"
-    #print('Querying regions with Vizier')
-    result = Vizier.query_region(coords, catalog=[catalog],
-                                 radius=Angle(size, "arcsec"))
+         #   coords = Table(data=[ra*u.hourangle,dec*u.deg],names=['_RAJ2000','_DEJ2000']),unit=(u.hourangle, u.deg)
+        #else:
+        coords = Table(data=[ra*u.deg,dec*u.deg],names=['_RAJ2000','_DEJ2000'])
+        
+        Vizier.ROW_LIMIT = -1
+        
+        catalog = "II/349/ps1"
+        #print('Querying regions with Vizier')
+        result = Vizier.query_region(coords, catalog=[catalog],
+                                     radius=Angle(size, "arcsec"))
+    else:
+        result = pd.DataFrame()
+        for i in range(len(ra)):
+            r = query_ps1(ra,dec,size/60**2)
+            result = pd.concat([result,r])
     no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
     if result is None:
@@ -521,24 +681,42 @@ def get_ps1(ra,dec,size=3):
 
     r = deepcopy(result.iloc[min_ind])
 
-    final = deepcopy(targets)
+    r = deepcopy(result)
+    final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])
     final['ra'] = np.nan
     final['dec'] = np.nan
     final['g'] = np.nan; final['r'] = np.nan; final['i'] = np.nan; 
-    final['z'] = np.nan; final['y'] = np.nan
+    final['z'] = np.nan; final['u'] = np.nan
     final['g_e'] = np.nan; final['r_e'] = np.nan; final['i_e'] = np.nan; 
-    final['z_e'] = np.nan; final['y_e'] = np.nan
+    final['z_e'] = np.nan; final['u_e'] = np.nan
 
-    final['g'].iloc[ind] = r['gmag'].values[ind]; final['r'].iloc[ind] = r['rmag'].values[ind]; final['i'].iloc[ind] = r['imag'].values[ind]
-    final['z'].iloc[ind] = r['zmag'].values[ind]; final['y'].iloc[ind] = r['ymag'].values[ind]
+    # assign magnitudes to the table and apply the DA WD calibration to PS1 DR1
+    # from Narayan 2019
+    if vizier:
+        
+        final['g'] = r['gmag'].values - 12e-3; final['r'] = r['rmag'].values - 4e-3
+        final['i'] = r['imag'].values - 13e-3; final['z'] = r['zmag'].values - 7e-3
+        final['y'] = r['ymag'].values # no correction for y
 
-    final['g_e'].iloc[ind] = r['e_gmag'].values[ind]; final['r_e'].iloc[ind] = r['e_rmag'].values[ind]; final['i_e'].iloc[ind] = r['e_imag'].values[ind]
-    final['z_e'].iloc[ind] = r['e_zmag'].values[ind]; final['y_e'].iloc[ind] = r['e_ymag'].values[ind]
+        final['g_e'] = r['e_gmag'].values; final['r_e'] = r['e_rmag'].values; final['i_e'] = r['e_imag'].values
+        final['z_e'] = r['e_zmag'].values; final['y_e'] = r['e_ymag'].values
+        final['ra'] = r['RAJ2000'].values; final['dec'] = r['DEJ2000'].values
+    else:
+        final['g'] = r['g'].values - 12e-3; final['r'] = r['r'].values - 4e-3
+        final['i'] = r['i'].values - 13e-3; final['z'] = r['z'].values - 7e-3
+        final['y'] = r['y'].values # no correction for y
 
-    final['ra'].iloc[ind] = r['RAJ2000'].values[ind]; final['dec'].iloc[ind] = r['DEJ2000'].values[ind]
+        final['g_e'] = r['gMeanPSFMagErr'].values; final['r_e'] = r['rMeanPSFMagErr'].values; final['i_e'] = r['iMeanPSFMagErr'].values
+        final['z_e'] = r['zMeanPSFMagErr'].values; final['y_e'] = r['yMeanPSFMagErr'].values
+        final['ra'] = r['raMean'].values; final['dec'] = r['decMean'].values
 
+    final = final.drop(['temp'], axis=1)
     return final 
 
+
+def get_decam(ra,dec,size=3):
+    result = get_decam_region(ra,dec,size/60**2)
+    return result
 
 def get_skymapper(ra,dec,size=3,vizier=False):
     """
@@ -709,6 +887,8 @@ def Tonry_reduce(Data,plot=False,savename=None,system='ps1'):
     '''
     data = deepcopy(Data)
     if system.lower() == 'ps1':
+        tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
+    if system.lower() == 'decam':
         tonry = np.loadtxt(package_directory + 'data/Tonry_splines.txt')
     elif system.lower() == 'skymapper':
         tonry = np.loadtxt(package_directory + 'data/SMspline.txt')
