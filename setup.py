@@ -17,11 +17,11 @@ DESCRIPTION = 'Calibrate photometric systems to PS1, DECam, and SkyMapper.'
 URL = 'https://github.com/CheerfulUser/calibrimbore'
 EMAIL = 'ryanridden@canterbury.ac.nz'
 AUTHOR ='Ryan Ridden'
-REQUIRES_PYTHON = '>=3.6.0'
+REQUIRES_PYTHON = '>=3.9.0'
 VERSION = '1.0.0'
 
 # What packages are required for this module to be executed?
-REQUIRED = ['numpy', 
+REQUIRED = ['numpy',
             'matplotlib',
             'pysynphot',
             'extinction',
@@ -29,7 +29,8 @@ REQUIRED = ['numpy',
             'scipy!=1.4.0,!=1.4.1,>=0.19.0',
             'astropy',
             'astroquery',
-            'astro-datalab']
+            'astro-datalab',
+            'ipython']
 
 # What packages are optional?
 EXTRAS = {
@@ -126,7 +127,9 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy'
     ],
