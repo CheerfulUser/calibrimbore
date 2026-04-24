@@ -53,7 +53,7 @@ g = np.loadtxt(package_directory + 'data/decam_bands/decam_g.dat')
 r = np.loadtxt(package_directory + 'data/decam_bands/decam_r.dat')
 i = np.loadtxt(package_directory + 'data/decam_bands/decam_i.dat')
 z = np.loadtxt(package_directory + 'data/decam_bands/decam_z.dat')
-#y = np.loadtxt(package_directory + 'data/decam_bands/decam_Y.dat')
+#y = np.loadtxt(package_directory + 'data/decam_bands/decam_y.dat')
 
 decam_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
                'r': S.ArrayBandpass(r[:,0],r[:,1]),
