@@ -1,6 +1,11 @@
 Calibrimbore
 ============
 
+[![Tests](https://github.com/CheerfulUser/calibrimbore/actions/workflows/tests.yml/badge.svg)](https://github.com/CheerfulUser/calibrimbore/actions/workflows/tests.yml)
+[![Coverage](https://codecov.io/gh/CheerfulUser/calibrimbore/branch/main/graph/badge.svg)](https://codecov.io/gh/CheerfulUser/calibrimbore)
+[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ### <p align=center> One System to rule them all, One System to find them, One System to bring them all and in the darkness bind them. </p>
 
 

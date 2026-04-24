@@ -297,19 +297,19 @@ def get_ps1_region(ra,dec,size=0.2,maglim=25,vizier=False):
         #print('Querying regions with Vizier')
         result = Vizier.query_region(coords, catalog=[catalog],
                                      radius=Angle(size, "arcsec"))
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                              'or Vizier is unavailable')
         if result is None:
             raise no_targets_found_message
         elif len(result) == 0:
             raise no_targets_found_message
         result = result[catalog].to_pandas()
     else:
+        no_targets_found_message = ValueError('Either no sources were found in the query region '
+                                              'or Vizier is unavailable')
         result = query_ps1(ra,dec,radius=size,maglim=maglim)
         if len(result) == 0:
             raise no_targets_found_message
-
-
-    no_targets_found_message = ValueError('Either no sources were found in the query region '
-                                          'or Vizier is unavailable')
     
     r = deepcopy(result)
     final = pd.DataFrame(data=np.zeros(len(r)),columns=['temp'])

@@ -79,8 +79,8 @@ def R_val(band,system,g=None,r=None,gr=None,ext=0):
 	if (gr is None) | np.isnan(gr).all():
 		Rb   = R[system][band]['coeff'][1]
 	else:
-		Rr0 = R[system][band]['coeff'][1]
-		Rg0 = R[system][band]['coeff'][1]
+		Rg0 = R[system]['g']['coeff'][0]
+		Rr0 = R[system]['r']['coeff'][0]
 
 		gr_int = gr - ext*(Rg0 - Rr0)
 

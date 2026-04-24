@@ -270,6 +270,7 @@ class sauron():
 			band = np.loadtxt(self.band)
 		# check dims of numpy array
 		elif type(self.band) == np.ndarray:
+			band = self.band
 			if band.shape[0] < band.shape[1]:
 				band = band.T
 		# make a pysynphot bandpass object
@@ -1184,7 +1185,7 @@ class sauron():
 			if catalog.lower() == 'vizier':
 				mags = self._get_catalog(ra,dec,close=close)
 
-			elif (catalog.lower == 'casjobs') & (self.system == ps1):
+			elif (catalog.lower() == 'casjobs') & (self.system == 'ps1'):
 				if (cas_id is not None) & (cas_pwd is not None):
 					print('Using CASJobs to access PS1 DR2')
 					mags = ps1_casjobs(ra, dec, size)
