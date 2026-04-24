@@ -53,13 +53,11 @@ g = np.loadtxt(package_directory + 'data/decam_bands/decam_g.dat')
 r = np.loadtxt(package_directory + 'data/decam_bands/decam_r.dat')
 i = np.loadtxt(package_directory + 'data/decam_bands/decam_i.dat')
 z = np.loadtxt(package_directory + 'data/decam_bands/decam_z.dat')
-y = np.loadtxt(package_directory + 'data/decam_bands/decam_y.dat')
 
 decam_bands = {'g': S.ArrayBandpass(g[:,0],g[:,1]),
                'r': S.ArrayBandpass(r[:,0],r[:,1]),
-               'i': S.ArrayBandpass(i[:,0],i[:,1]),  
+               'i': S.ArrayBandpass(i[:,0],i[:,1]),
                'z': S.ArrayBandpass(z[:,0],z[:,1])}
-               #'y': S.ArrayBandpass(y[:,0],y[:,1])} # dissable for now since not in DELVE
 
 g = np.loadtxt(package_directory + 'data/skymapper_bands/sm_g.dat')
 r = np.loadtxt(package_directory + 'data/skymapper_bands/sm_r.dat')
