@@ -27,7 +27,7 @@ jobs:
           python -m pip install --upgrade pip
           # Install scientific stack without pysynphot (requires CDBS data files
           # too large for CI; the test suite mocks it via conftest.py).
-          pip install numpy pandas scipy matplotlib astropy astroquery extinction
+          pip install numpy pandas scipy matplotlib astropy astroquery extinction ipython
           pip install pytest pytest-cov
           pip install -e . --no-deps
 

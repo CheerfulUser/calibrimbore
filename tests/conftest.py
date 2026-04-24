@@ -49,6 +49,15 @@ sys.modules["dl"] = MagicMock()
 sys.modules["dl.queryClient"] = MagicMock()
 sys.modules["mastcasjobs"] = MagicMock()
 
+# Mock IPython display — calibrimbore.py imports it at module level but it is
+# not a hard runtime requirement (only used in print_* methods).
+try:
+    import IPython  # noqa: F401
+except ModuleNotFoundError:
+    _mock_ipython = MagicMock()
+    sys.modules["IPython"] = _mock_ipython
+    sys.modules["IPython.display"] = _mock_ipython.display
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
