@@ -257,9 +257,9 @@ def query_ps1(ra,dec,radius=5/60,maglim=25,ref_filt='r',only_stars=False,catvers
         print('No detections')
         cat = []
     cat = isolate_stars(cat,only_stars=only_stars)
-    #cat = cut_bad_detections(cat)
-    ind = cat
-    cat = cat.mask(cat < -900,np.nan)
+    # Treat PS1 values below -900 as missing.
+    numeric = cat.select_dtypes(include=[np.number]).columns
+    cat[numeric] = cat[numeric].mask(cat[numeric] < -900, np.nan)
     return cat 
 
 
