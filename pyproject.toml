@@ -39,11 +39,14 @@ dependencies = [
 Homepage = "https://github.com/CheerfulUser/calibrimbore"
 
 [tool.setuptools]
-include-package-data = true
+include-package-data = false
 
 [tool.setuptools.packages.find]
 include = ["calibrimbore", "calibrimbore.*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+calibrimbore = ["data/*.txt", "data/*.npy", "data/*/*.dat"]
 
 [tool.setuptools.dynamic]
 version = {attr = "calibrimbore.__version__.__version__"}
