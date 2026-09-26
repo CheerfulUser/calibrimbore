@@ -15,13 +15,6 @@ You can pip install calibrimbore as:
 pip install git+https://github.com/CheerfulUser/calibrimbore.git
 ```
 
-Applying calibrimbore to obervational data requires the master branch of astroquery 
-so you will need to clone and install the git repo as follows:
-```bash
-git clone https://github.com/astropy/astroquery.git
-cd astroquery 
-pip install .
-```
 We also make use of [pysynphot](https://pysynphot.readthedocs.io/en/latest/) which uses external data libraries. While calibrimbore 
 doesn't use these libraries pysynphot will complain if they are not visible! 
 

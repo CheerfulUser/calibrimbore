@@ -18,7 +18,6 @@ from IPython.display import display, Math
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
-# !!! Need the master branch version of astroquery https://github.com/astropy/astroquery !!!
 from .bill import * 
 from .R_load import R_val
 
