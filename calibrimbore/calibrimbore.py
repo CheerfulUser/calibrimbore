@@ -1096,9 +1096,9 @@ class sauron():
 			if self.system == 'ps1':
 				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'decam':
-				cal_stars = get_decam_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+				cal_stars = get_decam_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'skymapper':
-				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'lsst':
 				cal_stars = get_lsst_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			

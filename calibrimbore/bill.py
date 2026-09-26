@@ -296,7 +296,7 @@ def get_ps1_region(ra,dec,size=0.2,maglim=25,vizier=False):
         catalog = "II/349/ps1"
         #print('Querying regions with Vizier')
         result = Vizier.query_region(coords, catalog=[catalog],
-                                     radius=Angle(size, "arcsec"))
+                                     radius=Angle(size, "deg"))
         no_targets_found_message = ValueError('Either no sources were found in the query region '
                                               'or Vizier is unavailable')
         if result is None:
@@ -420,7 +420,7 @@ def get_decam_region(ra,dec,size=0.2):
     final = final.sort_values('r')
     return final
 
-def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
+def get_skymapper_region(ra,dec,size=0.2,vizier=False):
     """
     Get Skymapper observations for a region.
     
@@ -432,7 +432,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
     dec : `float`
         Dec of target
     size : `float`
-        Search radius in arcsec, 0.2 deg is a good default 
+        Search radius in degrees, for both the direct service and VizieR.
+        Regions larger than one degree use the VizieR DR1.1 catalogue.
     
     -------
     Returns
@@ -441,8 +442,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         Table containing all relevant Skymapper observations for each object entered 
         with the ra and dec lists.
     """
-    if size > 60**2:
-        print('!!! Search area too large for SkyMapper DR2, using Vizier DR1.1 !!!')
+    if size > 1 and not vizier:
+        print('!!! SkyMapper search radius exceeds 1 degree, using Vizier DR1.1 !!!')
         vizier = True
 
     if (type(ra) == float) | (type(ra) == np.float64):
@@ -456,7 +457,7 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         catalog = "II/358/smss"
         #print('Querying regions with Vizier')
         result = Vizier.query_region(coords, catalog=[catalog],
-                                     radius=Angle(size, "arcsec"))
+                                     radius=Angle(size, "deg"))
         no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
         if result is None:
