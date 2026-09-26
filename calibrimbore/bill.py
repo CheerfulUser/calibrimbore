@@ -7,6 +7,7 @@ from astropy.coordinates import SkyCoord, Angle
 from astropy.io.votable import parse_single_table
 
 import os
+import warnings
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
 
@@ -498,8 +499,21 @@ def get_skymapper_region(ra,dec,size=0.2,vizier=False):
         ps = 'PSF'
     else:
         ps = '_psf'
-    final['g'] = r['g'+ps].values; final['r'] = r['r'+ps].values; final['i'] = r['i'+ps].values
-    final['z'] = r['z'+ps].values; final['u'] = r['u'+ps].values
+    try:
+        final['g'] = r['g' + ps].values
+        final['r'] = r['r' + ps].values
+        final['i'] = r['i' + ps].values
+        final['z'] = r['z' + ps].values
+        final['u'] = r['u' + ps].values
+    except KeyError:
+        final['g'] = r['g'].values
+        final['r'] = r['r'].values
+        final['i'] = r['i'].values
+        final['z'] = r['z'].values
+        final['u'] = r['u'].values
+        warnings.warn(
+            'SkyMapper response is missing PSF magnitude columns; '
+            'using g, r, i, z, u instead.', stacklevel=2)
     if vizier:
         final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
         final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 
