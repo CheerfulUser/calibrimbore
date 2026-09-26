@@ -7,7 +7,7 @@ name = "calibrimbore"
 dynamic = ["version"]
 description = "Calibrate photometric systems to PS1, DECam, and SkyMapper."
 readme = "README.md"
-requires-python = ">=3.9.0"
+requires-python = ">=3.9,<3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -20,18 +20,22 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "numpy",
+    # Latest NumPy release supported by pysynphot.
+    "numpy==1.24.4",
     "matplotlib",
-    "pysynphot",
+    "pysynphot>=2.0.0",
+    # pysynphot imports pkg_resources at runtime.
+    "setuptools<81",
     "extinction",
-    "pandas",
+    # Catalogue helpers still use DataFrame.append.
+    "pandas<2",
     "scipy>=1.5.0",
     "astropy",
-    "astroquery",
-    "astro-datalab",
+    "astroquery>=0.4.11",
+    # Later Data Lab releases require PyVO versions incompatible with astroquery.
+    "astro-datalab>=2.22.1,<2.23",
     "ipython",
 ]
 
