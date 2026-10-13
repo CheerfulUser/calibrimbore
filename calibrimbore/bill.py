@@ -7,6 +7,7 @@ from astropy.coordinates import SkyCoord, Angle
 from astropy.io.votable import parse_single_table
 
 import os
+import warnings
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
 
@@ -257,9 +258,9 @@ def query_ps1(ra,dec,radius=5/60,maglim=25,ref_filt='r',only_stars=False,catvers
         print('No detections')
         cat = []
     cat = isolate_stars(cat,only_stars=only_stars)
-    #cat = cut_bad_detections(cat)
-    ind = cat
-    cat = cat.mask(cat < -900,np.nan)
+    # Treat PS1 values below -900 as missing.
+    numeric = cat.select_dtypes(include=[np.number]).columns
+    cat[numeric] = cat[numeric].mask(cat[numeric] < -900, np.nan)
     return cat 
 
 
@@ -296,7 +297,7 @@ def get_ps1_region(ra,dec,size=0.2,maglim=25,vizier=False):
         catalog = "II/349/ps1"
         #print('Querying regions with Vizier')
         result = Vizier.query_region(coords, catalog=[catalog],
-                                     radius=Angle(size, "arcsec"))
+                                     radius=Angle(size, "deg"))
         no_targets_found_message = ValueError('Either no sources were found in the query region '
                                               'or Vizier is unavailable')
         if result is None:
@@ -420,7 +421,7 @@ def get_decam_region(ra,dec,size=0.2):
     final = final.sort_values('r')
     return final
 
-def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
+def get_skymapper_region(ra,dec,size=0.2,vizier=False):
     """
     Get Skymapper observations for a region.
     
@@ -432,7 +433,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
     dec : `float`
         Dec of target
     size : `float`
-        Search radius in arcsec, 0.2 deg is a good default 
+        Search radius in degrees, for both the direct service and VizieR.
+        Regions larger than one degree use the VizieR DR1.1 catalogue.
     
     -------
     Returns
@@ -441,8 +443,8 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         Table containing all relevant Skymapper observations for each object entered 
         with the ra and dec lists.
     """
-    if size > 60**2:
-        print('!!! Search area too large for SkyMapper DR2, using Vizier DR1.1 !!!')
+    if size > 1 and not vizier:
+        print('!!! SkyMapper search radius exceeds 1 degree, using Vizier DR1.1 !!!')
         vizier = True
 
     if (type(ra) == float) | (type(ra) == np.float64):
@@ -456,7 +458,7 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         catalog = "II/358/smss"
         #print('Querying regions with Vizier')
         result = Vizier.query_region(coords, catalog=[catalog],
-                                     radius=Angle(size, "arcsec"))
+                                     radius=Angle(size, "deg"))
         no_targets_found_message = ValueError('Either no sources were found in the query region '
                                           'or Vizier is unavailable')
         if result is None:
@@ -497,8 +499,21 @@ def get_skymapper_region(ra,dec,size=0.2*60**2,vizier=False):
         ps = 'PSF'
     else:
         ps = '_psf'
-    final['g'] = r['g'+ps].values; final['r'] = r['r'+ps].values; final['i'] = r['i'+ps].values
-    final['z'] = r['z'+ps].values; final['u'] = r['u'+ps].values
+    try:
+        final['g'] = r['g' + ps].values
+        final['r'] = r['r' + ps].values
+        final['i'] = r['i' + ps].values
+        final['z'] = r['z' + ps].values
+        final['u'] = r['u' + ps].values
+    except KeyError:
+        final['g'] = r['g'].values
+        final['r'] = r['r'].values
+        final['i'] = r['i'].values
+        final['z'] = r['z'].values
+        final['u'] = r['u'].values
+        warnings.warn(
+            'SkyMapper response is missing PSF magnitude columns; '
+            'using g, r, i, z, u instead.', stacklevel=2)
     if vizier:
         final['g_e'] = final['g'].values * np.nan; final['r_e'] = final['g'].values * np.nan 
         final['i_e'] = final['g'].values * np.nan; final['z_e'] = final['g'].values * np.nan 

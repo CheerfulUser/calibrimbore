@@ -18,7 +18,6 @@ from IPython.display import display, Math
 import os
 package_directory = os.path.dirname(os.path.abspath(__file__)) + '/'
 
-# !!! Need the master branch version of astroquery https://github.com/astropy/astroquery !!!
 from .bill import * 
 from .R_load import R_val
 
@@ -97,17 +96,17 @@ class sauron():
 		"""
 		Setup the class.
 		"""
+		self.band = band
+		self.name = name
+		self.savename = savename
+		self.zp = None
+		self.mag_system = 'ab'
+		self.spec_model = spec_model.lower()
+		self.color_correction = color_correction
 		if load_state is None:
-			self.band = band
-			self.name = name
-			self.zp = None
-			self.mag_system = 'ab'
-			self.spec_model = spec_model.lower()
-			self.color_correction = color_correction
 			self._check_spec_model()
 			self.system = system.lower()
 			self._check_system()
-			self.savename = savename
 			self._load_band()
 			self._load_sys_bands()
 			self.overlap = None
@@ -203,6 +202,9 @@ class sauron():
 		self.mag_system = state['mag_system'] 
 		self.sys_filters = state['sys_filters']
 		self.cubic_coeff = state['cubic_coeff'] 
+		# Earlier versions did not save this flag. A sixth coefficient means
+		# the model was fitted with colour correction enabled.
+		self.color_correction = state.get('color_correction', len(self.coeff) == 6)
 
 
 	def save_state(self,filename):
@@ -226,6 +228,7 @@ class sauron():
 		state['mag_system'] = self.mag_system
 		state['cubic_coeff'] = self.cubic_coeff
 		state['sys_filters'] = self.sys_filters
+		state['color_correction'] = self.color_correction
 
 		np.save(filename + ".npy", state)
 
@@ -1092,9 +1095,9 @@ class sauron():
 			if self.system == 'ps1':
 				cal_stars = get_ps1_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'decam':
-				cal_stars = get_decam_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+				cal_stars = get_decam_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'skymapper':
-				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
+				cal_stars = get_skymapper_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2)
 			elif self.system == 'lsst':
 				cal_stars = get_lsst_region(mags['ra'].iloc[i], mags['dec'].iloc[i],size=.2*60**2)
 			
@@ -1256,4 +1259,3 @@ class sauron():
 			eqn = 'R=%(v2)s %(v1)s(g-r)_(int)' % {'v1':str(np.round(self.R_coeff[1],3)),'v2':str(np.round(self.R_coeff[0],3))}
 			
 			return eqn
-
